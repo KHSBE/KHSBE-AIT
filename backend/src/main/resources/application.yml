@@ -1,0 +1,52 @@
+spring:
+  application:
+    name: compass-backend
+
+  # 1. Database (PostgreSQL)
+  datasource:
+    url: jdbc:postgresql://localhost:5432/compass
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+    driver-class-name: org.postgresql.Driver
+
+  # 2. JPA & Hibernate
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+        default_batch_fetch_size: 100
+
+  # 3. Google OAuth2 설정 (추가됨)
+  security:
+    oauth2:
+      client:
+        registration:
+          google:
+            client-id: ${GOOGLE_CLIENT_ID}
+            client-secret: ${GOOGLE_CLIENT_SECRET}
+            scope:
+              - profile
+              - email
+
+  # 4. Spring AI 설정
+  ai:
+    openai:
+      api-key: ${OPENAI_API_KEY}
+    vertex:
+      ai:
+        gemini:
+          project-id: ${GOOGLE_PROJECT_ID}
+          location: us-central1
+
+  # 5. Redis (AI 대화 맥락 캐싱용)
+  data:
+    redis:
+      host: localhost
+      port: 6379
+
+logging:
+  level:
+    org.springframework.ai: DEBUG # AI 요청/응답 로그 확인용

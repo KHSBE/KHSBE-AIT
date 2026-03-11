@@ -1,0 +1,25 @@
+services:
+  # 데이터베이스: pgvector가 설치된 이미지를 사용합니다.
+  postgres:
+    image: ankane/pgvector:latest
+    container_name: compass-db
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: compass
+      POSTGRES_USER: compass_user
+      POSTGRES_PASSWORD: compass_password
+    volumes:
+      - ./postgres_data:/var/lib/postgresql/data
+    restart: always
+
+  # 캐시/세션: 채팅 컨텍스트 유지를 위한 Redis입니다.
+  redis:
+    image: redis:latest
+    container_name: compass-redis
+    ports:
+      - "6379:6379"
+    restart: always
+
+volumes:
+  postgres_data:
