@@ -1,32 +1,26 @@
 package com.compass.domain.agent.dto;
 
-import lombok.Getter;
-import lombok.NoArgsConstructor;
 import java.util.List;
 
-@Getter
-@NoArgsConstructor
-public class AiPlanResponse {
-    private String title;
-    private String region;
-    private String startDate;
-    private String endDate;
-    private List<DayItinerary> itineraries;
+// AI 일정 생성 응답 규격
+public record AiPlanResponse(
+        String title,
+        String region,
+        String accommodation,
+        String startDate,
+        String endDate,
+        List<DayItinerary> itineraries
+) {
+    public record DayItinerary(
+            int day,
+            String theme,
+            List<PlaceDetail> places
+    ) {}
 
-    @Getter
-    @NoArgsConstructor
-    public static class DayItinerary {
-        private int day;
-        private String theme;
-        private List<PlaceDetail> places;
-    }
-
-    @Getter
-    @NoArgsConstructor
-    public static class PlaceDetail {
-        private String name;
-        private String memo;
-        private Double lat;
-        private Double lng;
-    }
+    public record PlaceDetail(
+            String name,
+            String memo,
+            Double lat,
+            Double lng
+    ) {}
 }

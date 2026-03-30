@@ -25,6 +25,8 @@ repositories {
     maven { url 'https://repo.spring.io/milestone' }
 }
 
+
+
 dependencies {
     // 1. Web & Validation
     implementation 'org.springframework.boot:spring-boot-starter-web'
@@ -50,8 +52,8 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-data-redis'
 
     // 6. Spring AI (Gemini & OpenAI)
-    implementation 'org.springframework.ai:spring-ai-vertex-ai-gemini-spring-boot-starter'
-    implementation 'org.springframework.ai:spring-ai-openai-spring-boot-starter'
+    implementation 'org.springframework.ai:spring-ai-starter-model-google-genai'
+    implementation 'org.springframework.ai:spring-ai-starter-vector-store-pgvector'
 
     // 7. Lombok
     compileOnly 'org.projectlombok:lombok'
@@ -64,13 +66,19 @@ dependencies {
 
     // 9. oauth2
     implementation 'org.springframework.boot:spring-boot-starter-oauth2-client'
+
+    // 10. env
+    implementation 'me.paulschwarz:spring-dotenv:4.0.0'
+
+
 }
 
 dependencyManagement {
     imports {
-        mavenBom "org.springframework.ai:spring-ai-bom:1.0.0-M5"
+        mavenBom "org.springframework.ai:spring-ai-bom:1.1.0-M2"
     }
 }
+
 
 // Querydsl QClass 생성 경로 설정
 def querydslDir = "src/main/generated"

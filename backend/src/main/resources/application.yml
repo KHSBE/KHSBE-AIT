@@ -2,14 +2,18 @@ spring:
   application:
     name: compass-backend
 
-  # 1. Database (PostgreSQL)
+  # ★ 핵심 추가: 아직 Step 4(기억 장착) 전이므로, 에러를 유발하는 Vector DB 자동 설정을 잠시 꺼둡니다.
+  autoconfigure:
+    exclude: org.springframework.ai.vectorstore.pgvector.autoconfigure.PgVectorStoreAutoConfiguration
+
+  # 1. Database (PostgreSQL - pgvector 이미지 설정 반영)
   datasource:
-    url: jdbc:postgresql://localhost:5432/compass
-    username: ${DB_USERNAME}
-    password: ${DB_PASSWORD}
+    url: jdbc:postgresql://127.0.0.1:5433/compass
+    username: ${DB_USERNAME:compass_user}
+    password: ${DB_PASSWORD:compass_password}
     driver-class-name: org.postgresql.Driver
 
-  # 2. JPA & Hibernate
+  # 2. JPA & Hibernate (테이블 자동 생성 및 쿼리 로그 설정)
   jpa:
     hibernate:
       ddl-auto: update
@@ -18,8 +22,9 @@ spring:
       hibernate:
         format_sql: true
         default_batch_fetch_size: 100
+        dialect: org.hibernate.dialect.PostgreSQLDialect
 
-  # 3. Google OAuth2 설정 (추가됨)
+  # 3. Google OAuth2 (기존 유지)
   security:
     oauth2:
       client:
@@ -31,22 +36,40 @@ spring:
               - profile
               - email
 
-  # 4. Spring AI 설정
+  # 4. Spring AI 설정 (Google AI Studio - Gemini 3.1 Flash Lite 적용)
   ai:
-    openai:
-      api-key: ${OPENAI_API_KEY}
-    vertex:
-      ai:
-        gemini:
-          project-id: ${GOOGLE_PROJECT_ID}
-          location: us-central1
+    google:
+      genai:
+        api-key: ${GOOGLE_AI_STUDIO_API_KEY}
+        chat:
+          options:
+            # 테스트 비용 걱정 없는 최신 경량 모델 세팅!
+            model: gemini-3.1-flash-lite-preview
+            temperature: 0.7
+            functions:
+              - currentWeatherFunction
+    # 벡터 저장소(pgvector) 자동 설정
+    vectorstore:
+      pgvector:
+        table-name: travel_embeddings
+        dimensions: 768 # Gemini 임베딩 모델 기준
 
-  # 5. Redis (AI 대화 맥락 캐싱용)
+  # 5. Redis (기존 유지)
   data:
     redis:
       host: localhost
       port: 6379
 
+# 6. JWT Secret (기존 유지)
+jwt:
+  secret: ${JWT_SECRET}
+
+# AI 동작 과정을 자세히 보기 위한 디버그 로그
 logging:
   level:
-    org.springframework.ai: DEBUG # AI 요청/응답 로그 확인용
+    org.springframework.ai: DEBUG
+
+
+# OpenWeatherMap API 설정
+weather:
+  api-key: ${WEATHER_API_KEY}

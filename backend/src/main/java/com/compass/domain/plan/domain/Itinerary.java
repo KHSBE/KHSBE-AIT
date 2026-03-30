@@ -1,40 +1,36 @@
 package com.compass.domain.plan.domain;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
-import lombok.AccessLevel;
-import lombok.Builder;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
+import lombok.*;
+import org.hibernate.annotations.BatchSize;
 
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 
 @Entity
-@Getter
+@Table(name = "itineraries")
+@Getter @Setter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
+@AllArgsConstructor
+@Builder
 public class Itinerary {
-
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    private Integer dayNumber;
+    private LocalDate travelDate;
+    private String theme;
+
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "plan_id")
+    @JoinColumn(name = "travel_plan_id")
+    @JsonIgnore // ★ API 응답 시 무한루프(StackOverflow)를 막아주는 핵심!
     private TravelPlan travelPlan;
 
-    private Integer dayNumber; // 1일차, 2일차...
-    private LocalDate travelDate;
-    private String theme;      // 해당 일차의 테마
-
+    @BatchSize(size = 100)
     @OneToMany(mappedBy = "itinerary", cascade = CascadeType.ALL)
+    @Builder.Default
     private List<Place> places = new ArrayList<>();
-
-    @Builder
-    public Itinerary(TravelPlan travelPlan, Integer dayNumber, LocalDate travelDate, String theme) {
-        this.travelPlan = travelPlan;
-        this.dayNumber = dayNumber;
-        this.travelDate = travelDate;
-        this.theme = theme;
-    }
 }

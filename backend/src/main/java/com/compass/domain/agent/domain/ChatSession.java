@@ -3,6 +3,7 @@ package com.compass.domain.agent.domain;
 import com.compass.domain.user.domain.User;
 import com.compass.domain.plan.domain.TravelPlan;
 import com.compass.global.common.BaseEntity;
+import com.fasterxml.jackson.annotation.JsonIgnore; // ★ 추가됨
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Builder;
@@ -23,15 +24,18 @@ public class ChatSession extends BaseEntity {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id")
+    @JsonIgnore // ★ JSON 변환 시 User 제외 (에러 방지)
     private User user;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "plan_id")
-    private TravelPlan travelPlan; // 계획 생성 후 연결될 수 있도록 null 허용
+    @JsonIgnore // ★ JSON 변환 시 TravelPlan 제외
+    private TravelPlan travelPlan;
 
     private String sessionTitle;
 
     @OneToMany(mappedBy = "session", cascade = CascadeType.ALL)
+    @JsonIgnore // ★ JSON 변환 시 Message 리스트 제외 (무한루프 방지)
     private List<ChatMessage> messages = new ArrayList<>();
 
     @Builder

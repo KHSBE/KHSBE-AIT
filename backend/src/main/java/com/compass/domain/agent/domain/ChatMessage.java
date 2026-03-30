@@ -1,5 +1,6 @@
 package com.compass.domain.agent.domain;
 
+import com.fasterxml.jackson.annotation.JsonIgnore; // ★ 추가됨
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Builder;
@@ -19,6 +20,7 @@ public class ChatMessage {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "session_id")
+    @JsonIgnore // ★ JSON 변환 시 Session 제외 (무한루프 방지)
     private ChatSession session;
 
     @Column(nullable = false)

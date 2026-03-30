@@ -10,6 +10,7 @@ import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 import java.time.LocalDateTime;
 
+// 공통 날짜 필드
 @Getter
 @MappedSuperclass
 @EntityListeners(AuditingEntityListener.class)

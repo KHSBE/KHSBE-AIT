@@ -1,13 +1,14 @@
 package com.compass.domain.user.domain;
 
 import jakarta.persistence.*;
-import lombok.AccessLevel;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
+import lombok.*;
 
+// 사용자 여행 취향
 @Entity
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
+@AllArgsConstructor
+@Builder
 public class UserPreference {
 
     @Id
@@ -18,8 +19,14 @@ public class UserPreference {
     @JoinColumn(name = "user_id")
     private User user;
 
-    private String preferredCategory; // 예: 맛집, 휴양
-    private String dietRestriction;    // 예: 다이어트 중(고칼로리 제외)
-    private Integer dailyBudget;
-    private String travelPace;         // 타이트한, 여유로운
+    private String preferredCategory;
+    private String dietRestriction;
+    private String travelPace;
+
+    // 정보 업데이트
+    public void update(String category, String diet, String pace) {
+        this.preferredCategory = category;
+        this.dietRestriction = diet;
+        this.travelPace = pace;
+    }
 }

@@ -1,65 +1,74 @@
 package com.compass.domain.plan.application;
 
 import com.compass.domain.plan.dao.TravelPlanRepository;
-import com.compass.domain.plan.domain.Itinerary;
-import com.compass.domain.plan.domain.Place;
-import com.compass.domain.plan.domain.TravelPlan;
+import com.compass.domain.plan.domain.*;
 import com.compass.domain.agent.dto.AiPlanResponse;
 import com.compass.domain.user.domain.User;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDate;
 
+// 여행 계획 저장 서비스
+@Slf4j
 @Service
 @RequiredArgsConstructor
 @Transactional
-
 public class PlanCommandService {
 
-    private final TravelPlanRepository travelPlanRepository;
-    private final ObjectMapper objectMapper; // JSON 파싱용
+    private final TravelPlanRepository planRepository;
 
-    public Long savePlanFromAi(User user, String aiJsonResponse) {
+    // ★ 파라미터를 String에서 AiPlanResponse 객체로 바로 받습니다! (ObjectMapper 삭제)
+    public Long savePlanFromAi(User user, AiPlanResponse res) {
         try {
-            // 1. AI 응답 문자열을 DTO로 변환
-            AiPlanResponse response = objectMapper.readValue(aiJsonResponse, AiPlanResponse.class);
+            // 필수 필드 체크 (NullPointerException 방지)
+            if (res.startDate() == null || res.endDate() == null) {
+                throw new IllegalArgumentException("AI 응답에 날짜 정보가 누락되었습니다.");
+            }
 
-            // 2. TravelPlan 엔티티 생성
-            TravelPlan plan = TravelPlan.builder()
+            var plan = TravelPlan.builder()
                     .user(user)
-                    .title(response.getTitle())
-                    .region(response.getRegion())
-                    .startDate(LocalDate.parse(response.getStartDate()))
-                    .endDate(LocalDate.parse(response.getEndDate()))
+                    .title(res.title())
+                    .region(res.region())
+                    .accommodation(res.accommodation())
+                    .startDate(LocalDate.parse(res.startDate()))
+                    .endDate(LocalDate.parse(res.endDate()))
                     .build();
 
-            // 3. 일차별 일정(Itinerary) 및 장소(Place) 매핑
-            response.getItineraries().forEach(dayDto -> {
-                Itinerary itinerary = Itinerary.builder()
-                        .travelPlan(plan)
-                        .dayNumber(dayDto.getDay())
-                        .travelDate(plan.getStartDate().plusDays(dayDto.getDay() - 1))
-                        .theme(dayDto.getTheme())
-                        .build();
-
-                dayDto.getPlaces().forEach(placeDto -> {
-                    Place.builder()
-                            .itinerary(itinerary)
-                            .placeName(placeDto.getName())
-                            .latitude(placeDto.getLat())
-                            .longitude(placeDto.getLng())
-                            .memo(placeDto.getMemo())
-                            .build();
-                    // Cascade 설정 덕분에 부모 엔티티 저장 시 함께 저장됨
-                });
-                plan.getItineraries().add(itinerary);
-            });
-
-            return travelPlanRepository.save(plan).getId();
+            mapItineraries(plan, res);
+            var savedPlan = planRepository.save(plan);
+            return savedPlan.getId();
         } catch (Exception e) {
-            throw new RuntimeException("AI 일정 저장 중 오류 발생: " + e.getMessage());
+            log.error("일정 저장 에러 발생. 객체 데이터: {}", res, e);
+            throw new RuntimeException("일정 저장 중 오류가 발생했습니다: " + e.getMessage());
+        }
+    }
+
+    // ★ 회원님이 기존에 완벽하게 짜두신 매핑 로직 그대로 사용!
+    private void mapItineraries(TravelPlan plan, AiPlanResponse res) {
+        if (res.itineraries() == null) return;
+
+        for (var day : res.itineraries()) {
+            var itinerary = Itinerary.builder()
+                    .travelPlan(plan)
+                    .dayNumber(day.day())
+                    .travelDate(plan.getStartDate().plusDays(day.day() - 1))
+                    .theme(day.theme())
+                    .build();
+
+            if (day.places() != null) {
+                for (var p : day.places()) {
+                    itinerary.getPlaces().add(Place.builder()
+                            .itinerary(itinerary)
+                            .placeName(p.name())
+                            .latitude(p.lat() != null ? p.lat() : 0.0)
+                            .longitude(p.lng() != null ? p.lng() : 0.0)
+                            .memo(p.memo())
+                            .build());
+                }
+            }
+            plan.getItineraries().add(itinerary);
         }
     }
 }

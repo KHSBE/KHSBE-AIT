@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Compass AI Planner</title>
+    <style>
+        body { font-family: 'Pretendard', sans-serif; background-color: #f4f7f6; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+        .phone-container { width: 400px; height: 750px; background: white; border-radius: 30px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); display: flex; flex-direction: column; overflow: hidden; position: relative; }
+        .header { background: #4A90E2; color: white; padding: 20px; text-align: center; font-size: 1.2rem; font-weight: bold; }
+
+        .token-area { padding: 10px 15px; background: #eef2f5; border-bottom: 1px solid #ddd; display: flex; align-items: center; gap: 10px; }
+        .token-area span { font-size: 0.85rem; color: #555; font-weight: bold; }
+        .token-area input { flex: 1; padding: 8px; border: 1px solid #ccc; border-radius: 5px; font-size: 0.8rem; outline: none; }
+
+        .chat-box { flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 15px; background: #f9fbfd; }
+        .msg { max-width: 75%; padding: 12px 16px; border-radius: 20px; font-size: 0.95rem; line-height: 1.4; }
+        .msg.bot { background: white; border: 1px solid #e1e4e8; align-self: flex-start; border-bottom-left-radius: 5px; }
+        .msg.user { background: #4A90E2; color: white; align-self: flex-end; border-bottom-right-radius: 5px; }
+
+        /* ★ 새롭게 추가된 일정표 카드 UI 디자인 */
+        .plan-card { width: 90%; max-width: none; background: white; padding: 15px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); border: 1px solid #e1e4e8; align-self: flex-start; margin-bottom: 10px;}
+        .plan-card h3 { margin: 0 0 5px 0; color: #4A90E2; font-size: 1.1rem;}
+        .plan-card .meta { font-size: 0.8rem; color: #666; margin-bottom: 15px; border-bottom: 1px solid #eee; padding-bottom: 10px;}
+        .day-block { background: #f4f7f6; padding: 12px; border-radius: 10px; margin-bottom: 10px; }
+        .day-block strong { color: #333; font-size: 0.95rem; display: block; margin-bottom: 8px; }
+        .day-block ul { margin: 0; padding-left: 20px; font-size: 0.85rem; color: #555; }
+        .day-block li { margin-bottom: 8px; }
+        .place-name { font-weight: bold; color: #333; }
+        .place-memo { color: #888; font-size: 0.8rem; display: block; margin-top: 2px; }
+
+        .input-area { display: flex; padding: 15px; background: white; border-top: 1px solid #eee; }
+        .input-area input { flex: 1; padding: 12px; border: 1px solid #ddd; border-radius: 20px; outline: none; font-size: 1rem; }
+        .input-area button { background: #4A90E2; color: white; border: none; padding: 0 20px; margin-left: 10px; border-radius: 20px; cursor: pointer; font-weight: bold; }
+
+        .modal-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: none; justify-content: center; align-items: flex-end; z-index: 10; }
+        .plan-form { background: white; width: 100%; border-top-left-radius: 20px; border-top-right-radius: 20px; padding: 30px 20px; box-sizing: border-box; transform: translateY(100%); transition: transform 0.3s ease-out; }
+        .plan-form.show { transform: translateY(0); }
+        .plan-form h3 { margin-top: 0; color: #333; }
+        .form-group { margin-bottom: 15px; }
+        .form-group label { display: block; font-size: 0.85rem; color: #666; margin-bottom: 5px; }
+        .form-group input, .form-group select { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 8px; box-sizing: border-box; outline: none; }
+        .submit-btn { width: 100%; padding: 15px; background: #4A90E2; color: white; border: none; border-radius: 10px; font-size: 1rem; font-weight: bold; cursor: pointer; margin-top: 10px; }
+
+        .loading { text-align: center; color: #888; font-size: 0.9rem; display: none; margin: 10px 0; }
+    </style>
+</head>
+<body>
+
+<div class="phone-container">
+    <div class="header">Compass AI 플래너</div>
+
+    <div class="token-area">
+        <span>🔑 인증</span>
+        <input type="password" id="authTokenInput" placeholder="Bearer Token (ey...)">
+    </div>
+
+    <div class="chat-box" id="chatBox">
+        <div class="msg bot">안녕하세요! 어디로 여행을 떠나고 싶으신가요? ✈️</div>
+    </div>
+    <div class="loading" id="loadingIndicator">AI가 생각 중입니다...</div>
+
+    <div class="input-area">
+        <input type="text" id="userInput" placeholder="메시지를 입력하세요..." onkeypress="handleEnter(event)">
+        <button onclick="sendMessage()">전송</button>
+    </div>
+
+    <div class="modal-overlay" id="modalOverlay">
+        <div class="plan-form" id="planForm">
+            <h3>📝 여행 상세 정보 입력</h3>
+            <div class="form-group">
+                <label>여행지</label>
+                <input type="text" id="dest" placeholder="예: 오사카, 삿포로">
+            </div>
+            <div class="form-group" style="display: flex; gap: 10px;">
+                <div style="flex:1;">
+                    <label>가는 날</label>
+                    <input type="date" id="startDate">
+                </div>
+                <div style="flex:1;">
+                    <label>오는 날</label>
+                    <input type="date" id="endDate">
+                </div>
+            </div>
+            <div class="form-group">
+                <label>일행</label>
+                <select id="companion">
+                    <option value="혼자">혼자</option>
+                    <option value="친구와">친구와</option>
+                    <option value="연인과">연인과</option>
+                    <option value="가족과">가족과</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>여행 스타일</label>
+                <input type="text" id="style" placeholder="예: 맛집 탐방, 힐링, 많이 걷기">
+            </div>
+            <button class="submit-btn" onclick="submitPlan()">AI 일정 생성하기 🚀</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    const chatBox = document.getElementById('chatBox');
+    const loading = document.getElementById('loadingIndicator');
+    const modalOverlay = document.getElementById('modalOverlay');
+    const planForm = document.getElementById('planForm');
+
+    function getHeaders(isJson = false) {
+        const headers = {};
+        if (isJson) headers['Content-Type'] = 'application/json';
+        const token = document.getElementById('authTokenInput').value.trim();
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+        return headers;
+    }
+
+    function appendMessage(sender, text) {
+        const div = document.createElement('div');
+        div.className = `msg ${sender}`;
+        div.innerText = text;
+        chatBox.appendChild(div);
+        chatBox.scrollTop = chatBox.scrollHeight;
+    }
+
+    // ★ 백엔드에서 받은 일정 데이터(AiPlanResponse)를 UI 카드로 그려주는 함수
+    function appendPlanCard(plan) {
+        let html = `
+            <h3>🗓️ ${plan.title}</h3>
+            <div class="meta">📍 ${plan.region} | 📅 ${plan.startDate} ~ ${plan.endDate}</div>
+        `;
+
+        // 각 일자별(Day) 반복
+        if(plan.itineraries) {
+            plan.itineraries.forEach(itinerary => {
+                html += `
+                    <div class="day-block">
+                        <strong>Day ${itinerary.day} : ${itinerary.theme}</strong>
+                        <ul>
+                `;
+                // 각 장소(Place) 반복
+                if(itinerary.places) {
+                    itinerary.places.forEach(place => {
+                        html += `<li><span class="place-name">${place.name}</span> <span class="place-memo">- ${place.memo}</span></li>`;
+                    });
+                }
+                html += `</ul></div>`;
+            });
+        }
+
+        const div = document.createElement('div');
+        div.className = `plan-card`;
+        div.innerHTML = html;
+        chatBox.appendChild(div);
+        chatBox.scrollTop = chatBox.scrollHeight;
+    }
+
+    function handleEnter(e) { if (e.key === 'Enter') sendMessage(); }
+
+    async function sendMessage() {
+        const input = document.getElementById('userInput');
+        const message = input.value.trim();
+        if (!message) return;
+
+        appendMessage('user', message);
+        input.value = '';
+        loading.style.display = 'block';
+
+        try {
+            const response = await fetch(`http://localhost:8080/api/agent/chat?message=${encodeURIComponent(message)}`, {
+                method: 'GET',
+                headers: getHeaders()
+            });
+            const data = await response.json();
+            loading.style.display = 'none';
+
+            appendMessage('bot', data.message);
+
+            if (data.intent === 'PLAN_CREATION') {
+                setTimeout(() => {
+                    modalOverlay.style.display = 'flex';
+                    setTimeout(() => planForm.classList.add('show'), 10);
+                }, 1000);
+            }
+        } catch (error) {
+            loading.style.display = 'none';
+            appendMessage('bot', '서버와 연결할 수 없습니다. CORS 설정이나 토큰을 확인해주세요.');
+        }
+    }
+
+    async function submitPlan() {
+        const dest = document.getElementById('dest').value;
+        const start = document.getElementById('startDate').value;
+        const end = document.getElementById('endDate').value;
+        const comp = document.getElementById('companion').value;
+        const style = document.getElementById('style').value;
+
+        if(!dest || !start || !end) {
+            alert('여행지, 가는 날, 오는 날은 필수입니다!');
+            return;
+        }
+
+        const finalRequest = `목적지는 ${dest}이고, 날짜는 ${start}부터 ${end}까지입니다. ${comp} 갈 예정이며, 여행 스타일은 '${style}' 위주로 계획해 주세요.`;
+
+        planForm.classList.remove('show');
+        setTimeout(() => modalOverlay.style.display = 'none', 300);
+
+        appendMessage('user', '[일정 생성 정보 전달 완료]');
+        loading.style.display = 'block';
+
+        try {
+            const response = await fetch('http://localhost:8080/api/agent/plan', {
+                method: 'POST',
+                headers: getHeaders(true),
+                body: JSON.stringify({ request: finalRequest })
+            });
+            const data = await response.json(); // 이제 data.data 안에 전체 일정 JSON이 들어있습니다!
+            loading.style.display = 'none';
+
+            if(data.success) {
+                appendMessage('bot', `🎉 완벽한 일정을 준비했습니다! 확인해 보세요.`);
+                // ★ 대망의 일정 카드 그리기 호출!
+                appendPlanCard(data.data);
+            } else {
+                appendMessage('bot', '일정 생성에 실패했습니다.');
+            }
+        } catch (error) {
+            loading.style.display = 'none';
+            appendMessage('bot', '서버 에러가 발생했습니다.');
+        }
+    }
+</script>
+
+</body>
+</html>
