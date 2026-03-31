@@ -1,0 +1,4 @@
+api.compass-travel.site {
+    reverse_proxy backend:8080
+}
+

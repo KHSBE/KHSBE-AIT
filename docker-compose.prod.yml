@@ -1,0 +1,50 @@
+services:
+  postgres:
+    image: ankane/pgvector:latest
+    container_name: compass-db
+    environment:
+      POSTGRES_DB: ${DB_NAME:-compass}
+      POSTGRES_USER: ${DB_USERNAME:-compass_user}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - compass_db_data:/var/lib/postgresql/data
+    restart: always
+
+  redis:
+    image: redis:latest
+    container_name: compass-redis
+    restart: always
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: compass-backend
+    env_file:
+      - .env
+    depends_on:
+      - postgres
+      - redis
+    expose:
+      - "8080"
+    restart: always
+
+  caddy:
+    image: caddy:2
+    container_name: compass-caddy
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - backend
+    restart: always
+
+volumes:
+  compass_db_data:
+  caddy_data:
+  caddy_config:
+
