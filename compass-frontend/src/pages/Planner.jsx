@@ -1,12 +1,13 @@
 import { useState, useRef, useEffect } from 'react';
 import { Send, Bot, Calendar, Users, Star, Loader2, PlaneTakeoff, PlaneLanding, BedDouble, MessageSquare, Plus, Trash2, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 // ★ 토큰 자동 갱신 마법 함수 가져오기!
-import { fetchWithAuth } from '../utils/api';
+import { fetchWithAuth, buildApiUrl } from '../utils/api';
 
 export default function Planner() {
     const [sessions, setSessions] = useState([]);
     const [currentSessionId, setCurrentSessionId] = useState(null);
     const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+    const [isMobile, setIsMobile] = useState(false);
 
     const [messages, setMessages] = useState([{ sender: 'bot', text: '안녕하세요! 어디로 여행을 떠나고 싶으신가요? ✈️' }]);
     const [inputMessage, setInputMessage] = useState('');
@@ -18,6 +19,19 @@ export default function Planner() {
     });
 
     const messagesEndRef = useRef(null);
+
+    useEffect(() => {
+        const syncLayout = () => {
+            const mobile = window.innerWidth < 1024;
+            setIsMobile(mobile);
+            setIsSidebarOpen(!mobile);
+        };
+
+        syncLayout();
+        window.addEventListener('resize', syncLayout);
+        return () => window.removeEventListener('resize', syncLayout);
+    }, []);
+
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, [messages]);
@@ -34,7 +48,7 @@ export default function Planner() {
     const fetchSessions = async () => {
         try {
             // ★ fetch -> fetchWithAuth 로 변경
-            const response = await fetchWithAuth('http://localhost:8080/api/chat/sessions', { headers: getHeaders() });
+            const response = await fetchWithAuth(buildApiUrl('/api/chat/sessions'), { headers: getHeaders() });
             const data = await response.json();
 
             if (data.success) {
@@ -52,10 +66,11 @@ export default function Planner() {
     const loadSession = async (sessionId) => {
         setCurrentSessionId(sessionId);
         setMessages([]);
+        if (isMobile) setIsSidebarOpen(false);
         setIsLoading(true);
         try {
             // ★ fetch -> fetchWithAuth 로 변경
-            const response = await fetchWithAuth(`http://localhost:8080/api/chat/sessions/${sessionId}/messages`, { headers: getHeaders() });
+            const response = await fetchWithAuth(buildApiUrl(`/api/chat/sessions/${sessionId}/messages`), { headers: getHeaders() });
             const data = await response.json();
 
             if (data.success) {
@@ -75,6 +90,7 @@ export default function Planner() {
     const startNewChat = () => {
         setCurrentSessionId(null);
         setMessages([{ sender: 'bot', text: '새로운 여행 계획을 세워볼까요? 어디로 가고 싶으신가요? ✈️' }]);
+        if (isMobile) setIsSidebarOpen(false);
     };
 
     const deleteSession = async (e, sessionId) => {
@@ -83,7 +99,7 @@ export default function Planner() {
 
         try {
             // ★ fetch -> fetchWithAuth 로 변경
-            await fetchWithAuth(`http://localhost:8080/api/chat/sessions/${sessionId}`, { method: 'DELETE', headers: getHeaders() });
+            await fetchWithAuth(buildApiUrl(`/api/chat/sessions/${sessionId}`), { method: 'DELETE', headers: getHeaders() });
             fetchSessions();
             if (currentSessionId === sessionId) startNewChat();
         } catch (error) {
@@ -99,7 +115,7 @@ export default function Planner() {
         setIsLoading(true);
 
         try {
-            const url = `http://localhost:8080/api/agent/chat?message=${encodeURIComponent(userMsg)}${currentSessionId ? `&sessionId=${currentSessionId}` : ''}`;
+            const url = buildApiUrl(`/api/agent/chat?message=${encodeURIComponent(userMsg)}${currentSessionId ? `&sessionId=${currentSessionId}` : ''}`);
             // ★ fetch -> fetchWithAuth 로 변경
             const response = await fetchWithAuth(url, { method: 'GET', headers: getHeaders() });
             const data = await response.json();
@@ -135,7 +151,7 @@ export default function Planner() {
 
         try {
             // ★ fetch -> fetchWithAuth 로 변경
-            const response = await fetchWithAuth('http://localhost:8080/api/agent/plan', {
+            const response = await fetchWithAuth(buildApiUrl('/api/agent/plan'), {
                 method: 'POST',
                 headers: getHeaders(true),
                 body: JSON.stringify({ request: finalRequest })
@@ -159,27 +175,42 @@ export default function Planner() {
     };
 
     return (
-        <div className="flex h-[calc(100vh-80px)] bg-white overflow-hidden">
+        <div className="relative flex h-[calc(100vh-76px)] overflow-hidden bg-[#f7f1e6]">
+            {isMobile && isSidebarOpen && (
+                <button
+                    type="button"
+                    aria-label="사이드바 닫기"
+                    onClick={() => setIsSidebarOpen(false)}
+                    className="absolute inset-0 z-10 bg-black/35"
+                />
+            )}
 
             {/* ⬅️ 좌측 사이드바 (채팅 세션 목록) */}
-            <div className={`${isSidebarOpen ? 'w-72' : 'w-0'} bg-gray-50 border-r border-gray-200 transition-all duration-300 flex flex-col overflow-hidden shrink-0`}>
+            <div
+                className={[
+                    'flex flex-col overflow-hidden border-r border-[#ddd2bf] bg-[#fbf6ee] transition-all duration-300',
+                    isMobile
+                        ? `absolute left-0 top-0 z-20 h-full w-[86%] max-w-[340px] shrink-0 transform ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`
+                        : `${isSidebarOpen ? 'w-72' : 'w-0'} relative h-full shrink-0`,
+                ].join(' ')}
+            >
                 <div className="p-4">
-                    <button onClick={startNewChat} className="w-full flex items-center gap-2 bg-white border border-gray-200 shadow-sm hover:border-blue-400 hover:text-blue-600 transition p-3 rounded-xl font-bold text-gray-700">
+                    <button onClick={startNewChat} className="flex w-full items-center gap-2 rounded-2xl border border-[#d8ccbb] bg-[#fffdf8] p-3 font-bold text-[#3f4755] shadow-sm transition hover:border-[#0f7a80] hover:text-[#0f7a80]">
                         <Plus size={18} /> 새 여행 계획하기
                     </button>
                 </div>
 
                 <div className="flex-1 overflow-y-auto p-4 pt-0 space-y-2">
-                    <p className="text-xs font-bold text-gray-400 mb-3 ml-2">최근 대화</p>
+                    <p className="mb-3 ml-2 text-xs font-bold uppercase tracking-[0.12em] text-[#8a7c65]">최근 대화</p>
                     {sessions && sessions.length > 0 ? (
                         sessions.map(session => (
                             <div
                                 key={session.id}
                                 onClick={() => loadSession(session.id)}
-                                className={`group flex items-center justify-between p-3 rounded-xl cursor-pointer transition ${currentSessionId === session.id ? 'bg-blue-50 border border-blue-100 text-blue-700' : 'hover:bg-gray-100 text-gray-600'}`}
+                                className={`group flex cursor-pointer items-center justify-between rounded-xl p-3 transition ${currentSessionId === session.id ? 'border border-[#a8d5d1] bg-[#def3f1] text-[#0f7a80]' : 'text-[#5e6673] hover:bg-[#f1e9db]'}`}
                             >
                                 <div className="flex items-center gap-3 overflow-hidden">
-                                    <MessageSquare size={16} className={currentSessionId === session.id ? 'text-blue-500' : 'text-gray-400'} />
+                                    <MessageSquare size={16} className={currentSessionId === session.id ? 'text-[#0f7a80]' : 'text-[#9aa3b2]'} />
                                     <span className="text-sm font-semibold truncate">{session.sessionTitle}</span>
                                 </div>
                                 <button onClick={(e) => deleteSession(e, session.id)} className="opacity-0 group-hover:opacity-100 p-1 hover:text-red-500 transition">
@@ -188,53 +219,53 @@ export default function Planner() {
                             </div>
                         ))
                     ) : (
-                        <p className="text-center text-sm text-gray-400 mt-10">대화 기록이 없습니다.</p>
+                        <p className="mt-10 text-center text-sm text-[#8d95a3]">대화 기록이 없습니다.</p>
                     )}
                 </div>
             </div>
 
             {/* ➡️ 우측 메인 채팅 영역 */}
-            <div className="flex-1 flex flex-col relative bg-white">
+            <div className="relative flex flex-1 flex-col bg-transparent">
 
                 {/* 사이드바 토글 버튼 */}
-                <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="absolute top-4 left-4 z-10 p-2 bg-white border border-gray-200 rounded-lg shadow-sm text-gray-500 hover:text-gray-800 transition">
+                <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="absolute left-4 top-4 z-10 rounded-lg border border-[#d8ccba] bg-[#fffdf8] p-2 text-[#6a7280] shadow-sm transition hover:text-[#1f2430] lg:hidden">
                     {isSidebarOpen ? <PanelLeftClose size={20} /> : <PanelLeftOpen size={20} />}
                 </button>
 
-                <div className="flex-1 overflow-y-auto p-4 md:p-8 pt-16">
+                <div className="flex-1 overflow-y-auto p-4 pt-16 md:p-8 md:pt-8">
                     <div className="max-w-3xl mx-auto space-y-8">
                         {messages.map((msg, idx) => (
                             <div key={idx} className={`flex gap-4 ${msg.sender === 'user' ? 'justify-end' : 'justify-start'} animate-in fade-in slide-in-from-bottom-2`}>
-                                {msg.sender === 'bot' && <div className="w-10 h-10 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center shrink-0 shadow-sm"><Bot size={20} /></div>}
+                                {msg.sender === 'bot' && <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#d6f0ee] text-[#0f7a80] shadow-sm"><Bot size={20} /></div>}
 
-                                <div className={`max-w-[85%] rounded-2xl p-5 ${msg.sender === 'user' ? 'bg-gray-800 text-white rounded-tr-sm shadow-md' : 'bg-gray-50 text-gray-800 rounded-tl-sm border border-gray-100'}`}>
+                                <div className={`max-w-[92%] rounded-2xl p-4 sm:max-w-[85%] sm:p-5 ${msg.sender === 'user' ? 'rounded-tr-sm bg-[#1e2430] text-white shadow-md' : 'rounded-tl-sm border border-[#ddd2bf] bg-[#fffdf8] text-[#1f2430]'}`}>
 
                                     {!msg.isPlanCard && <p className="leading-relaxed whitespace-pre-wrap text-[15px]">{msg.text}</p>}
 
                                     {/* 일정표 미리보기 카드 UI */}
                                     {msg.isPlanCard && msg.planData && (
                                         <div className="space-y-4">
-                                            <div className="border-b border-gray-200 pb-3 mb-4">
-                                                <h3 className="text-xl font-bold text-blue-700">{msg.planData.title}</h3>
-                                                <p className="text-sm text-gray-500 mt-1">{msg.planData.region} | {msg.planData.startDate} ~ {msg.planData.endDate}</p>
-                                                {msg.planData.accommodation && <p className="text-sm text-amber-600 mt-1 font-semibold flex items-center gap-1"><BedDouble size={14}/> {msg.planData.accommodation}</p>}
+                                            <div className="mb-4 border-b border-[#ddd2bf] pb-3">
+                                                <h3 className="text-xl font-bold text-[#0f7a80]">{msg.planData.title}</h3>
+                                                <p className="mt-1 text-sm text-[#5e6673]">{msg.planData.region} | {msg.planData.startDate} ~ {msg.planData.endDate}</p>
+                                                {msg.planData.accommodation && <p className="mt-1 flex items-center gap-1 text-sm font-semibold text-[#b8512d]"><BedDouble size={14}/> {msg.planData.accommodation}</p>}
                                             </div>
                                             {msg.planData.itineraries?.map(day => (
-                                                <div key={day.dayNumber} className="bg-white p-4 rounded-xl border border-blue-100 shadow-sm">
-                                                    <h4 className="font-bold text-gray-800 mb-2 flex items-center gap-2">
-                                                        <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded text-sm">Day {day.dayNumber}</span>
+                                                <div key={day.dayNumber} className="rounded-xl border border-[#c8e5e2] bg-[#f5fffe] p-4 shadow-sm">
+                                                    <h4 className="mb-2 flex items-center gap-2 font-bold text-[#1f2430]">
+                                                        <span className="rounded bg-[#d6f0ee] px-2 py-0.5 text-sm text-[#0f7a80]">Day {day.dayNumber}</span>
                                                         {day.theme}
                                                     </h4>
                                                     <ul className="space-y-3 mt-3">
                                                         {day.places?.map((place, pIdx) => (
                                                             <li key={pIdx} className="flex gap-3 text-sm">
                                                                 <div className="flex flex-col items-center mt-1">
-                                                                    <div className="w-2 h-2 rounded-full bg-blue-400"></div>
-                                                                    {pIdx !== day.places.length - 1 && <div className="w-0.5 h-full bg-blue-100 my-1"></div>}
+                                                                    <div className="h-2 w-2 rounded-full bg-[#0f7a80]" />
+                                                                    {pIdx !== day.places.length - 1 && <div className="my-1 h-full w-0.5 bg-[#bce0dd]" />}
                                                                 </div>
                                                                 <div>
-                                                                    <p className="font-semibold text-gray-800">{place.placeName || place.name}</p>
-                                                                    <p className="text-gray-500 text-xs mt-0.5">{place.memo}</p>
+                                                                    <p className="font-semibold text-[#1f2430]">{place.placeName || place.name}</p>
+                                                                    <p className="mt-0.5 text-xs text-[#5e6673]">{place.memo}</p>
                                                                 </div>
                                                             </li>
                                                         ))}
@@ -248,8 +279,8 @@ export default function Planner() {
                         ))}
                         {isLoading && (
                             <div className="flex justify-start gap-4 animate-pulse">
-                                <div className="w-10 h-10 bg-gray-100 text-gray-400 rounded-full flex items-center justify-center"><Loader2 className="animate-spin" size={20} /></div>
-                                <div className="bg-gray-50 rounded-2xl p-4 rounded-tl-sm border border-gray-100 text-gray-500 font-medium">에이전트가 고민 중입니다...</div>
+                                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#ece5d8] text-[#8d95a3]"><Loader2 className="animate-spin" size={20} /></div>
+                                <div className="rounded-2xl rounded-tl-sm border border-[#ddd2bf] bg-[#fffdf8] p-4 font-medium text-[#5e6673]">에이전트가 고민 중입니다...</div>
                             </div>
                         )}
                         <div ref={messagesEndRef} />
@@ -257,8 +288,8 @@ export default function Planner() {
                 </div>
 
                 {/* 하단 입력창 고정 */}
-                <div className="p-4 bg-white border-t border-gray-100">
-                    <div className="max-w-3xl mx-auto flex gap-2 relative shadow-sm rounded-full bg-white border border-gray-200 focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-100 transition-all">
+                <div className="border-t border-[#ddd2bf] bg-[#fffdf8] p-4">
+                    <div className="relative mx-auto flex max-w-3xl gap-2 rounded-full border border-[#d8ccba] bg-white shadow-sm transition-all focus-within:border-[#0f7a80] focus-within:ring-2 focus-within:ring-[#d6f0ee]">
                         <input
                             type="text"
                             value={inputMessage} onChange={e => setInputMessage(e.target.value)}
@@ -266,68 +297,68 @@ export default function Planner() {
                             placeholder="제주도 2박 3일 맛집 투어 일정 짜줘!"
                             className="flex-1 bg-transparent border-none rounded-full px-6 py-4 focus:outline-none text-[15px]"
                         />
-                        <button onClick={sendMessage} disabled={isLoading} className="absolute right-2 top-2 bottom-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 text-white rounded-full px-5 flex items-center justify-center transition shadow-sm">
+                        <button onClick={sendMessage} disabled={isLoading} className="absolute bottom-2 right-2 top-2 flex items-center justify-center rounded-full bg-[#ff6a3d] px-5 text-white shadow-sm transition hover:bg-[#e85a30] disabled:bg-gray-300">
                             <Send size={18} />
                         </button>
                     </div>
-                    <p className="text-center text-xs text-gray-400 mt-3">AI가 생성한 일정은 참고용이며, 실제 예약 및 휴무일은 별도 확인이 필요합니다.</p>
+                    <p className="mt-3 text-center text-xs text-[#8d95a3]">AI가 생성한 일정은 참고용이며, 실제 예약 및 휴무일은 별도 확인이 필요합니다.</p>
                 </div>
             </div>
 
             {/* 모달 팝업 영역 */}
             {isModalOpen && (
                 <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-                    <div className="bg-white rounded-[2rem] w-full max-w-lg overflow-hidden shadow-2xl animate-in fade-in zoom-in duration-200 border border-gray-100">
-                        <div className="bg-gradient-to-r from-blue-600 to-indigo-600 p-8 text-white text-center relative overflow-hidden">
+                    <div className="max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-[2rem] border border-[#d9cfbf] bg-white shadow-2xl duration-200 animate-in fade-in zoom-in">
+                        <div className="relative overflow-hidden bg-gradient-to-r from-[#0f7a80] to-[#ff6a3d] p-6 text-center text-white sm:p-8">
                             <h2 className="text-3xl font-black relative z-10">여행 정보 입력</h2>
-                            <p className="text-blue-100 text-sm mt-2 relative z-10 font-medium">완벽한 동선을 위해 추가 정보를 알려주세요!</p>
+                            <p className="relative z-10 mt-2 text-sm font-medium text-white/80">완벽한 동선을 위해 추가 정보를 알려주세요.</p>
                         </div>
 
-                        <div className="p-8 space-y-4 bg-gray-50">
-                            <div className="flex gap-4">
-                                <div className="flex-1 bg-white p-2 rounded-2xl shadow-sm border border-gray-100 focus-within:ring-2 focus-within:ring-blue-500 transition">
-                                    <label className="flex items-center gap-1.5 text-xs font-bold text-gray-500 ml-2 mt-1"><PlaneTakeoff size={14}/> 출발지</label>
-                                    <input type="text" className="w-full p-2 bg-transparent outline-none text-gray-800 font-semibold" placeholder="예: 부산" value={formData.departure} onChange={e => setFormData({...formData, departure: e.target.value})} />
+                        <div className="space-y-4 bg-[#f7f1e6] p-5 sm:p-8">
+                            <div className="flex flex-col gap-4 sm:flex-row">
+                                <div className="flex-1 rounded-2xl border border-[#ddd2bf] bg-white p-2 shadow-sm transition focus-within:ring-2 focus-within:ring-[#d6f0ee]">
+                                    <label className="ml-2 mt-1 flex items-center gap-1.5 text-xs font-bold text-[#6e7685]"><PlaneTakeoff size={14}/> 출발지</label>
+                                    <input type="text" className="w-full bg-transparent p-2 font-semibold text-[#1f2430] outline-none" placeholder="예: 부산" value={formData.departure} onChange={e => setFormData({...formData, departure: e.target.value})} />
                                 </div>
-                                <div className="flex-1 bg-white p-2 rounded-2xl shadow-sm border border-gray-100 focus-within:ring-2 focus-within:ring-blue-500 transition">
-                                    <label className="flex items-center gap-1.5 text-xs font-bold text-gray-500 ml-2 mt-1"><PlaneLanding size={14}/> 도착지</label>
-                                    <input type="text" className="w-full p-2 bg-transparent outline-none text-gray-800 font-semibold" placeholder="예: 오사카" value={formData.dest} onChange={e => setFormData({...formData, dest: e.target.value})} />
-                                </div>
-                            </div>
-
-                            <div className="w-full bg-white p-2 rounded-2xl shadow-sm border border-gray-100 focus-within:ring-2 focus-within:ring-blue-500 transition">
-                                <label className="flex items-center gap-1.5 text-xs font-bold text-gray-500 ml-2 mt-1"><BedDouble size={14}/> 예약한 숙소 (선택)</label>
-                                <input type="text" className="w-full p-2 bg-transparent outline-none text-gray-800 font-semibold text-sm" placeholder="예: 신라호텔 (비워두면 AI가 추천!)" value={formData.accommodation} onChange={e => setFormData({...formData, accommodation: e.target.value})} />
-                            </div>
-
-                            <div className="flex gap-4">
-                                <div className="flex-1 bg-white p-2 rounded-2xl shadow-sm border border-gray-100 focus-within:ring-2 focus-within:ring-blue-500 transition">
-                                    <label className="flex items-center gap-1.5 text-xs font-bold text-gray-500 ml-2 mt-1"><Calendar size={14}/> 가는 날</label>
-                                    <input type="date" className="w-full p-2 bg-transparent outline-none text-gray-800 font-semibold text-sm" value={formData.startDate} onChange={e => setFormData({...formData, startDate: e.target.value})} />
-                                </div>
-                                <div className="flex-1 bg-white p-2 rounded-2xl shadow-sm border border-gray-100 focus-within:ring-2 focus-within:ring-blue-500 transition">
-                                    <label className="flex items-center gap-1.5 text-xs font-bold text-gray-500 ml-2 mt-1"><Calendar size={14}/> 오는 날</label>
-                                    <input type="date" className="w-full p-2 bg-transparent outline-none text-gray-800 font-semibold text-sm" value={formData.endDate} onChange={e => setFormData({...formData, endDate: e.target.value})} />
+                                <div className="flex-1 rounded-2xl border border-[#ddd2bf] bg-white p-2 shadow-sm transition focus-within:ring-2 focus-within:ring-[#d6f0ee]">
+                                    <label className="ml-2 mt-1 flex items-center gap-1.5 text-xs font-bold text-[#6e7685]"><PlaneLanding size={14}/> 도착지</label>
+                                    <input type="text" className="w-full bg-transparent p-2 font-semibold text-[#1f2430] outline-none" placeholder="예: 오사카" value={formData.dest} onChange={e => setFormData({...formData, dest: e.target.value})} />
                                 </div>
                             </div>
 
-                            <div className="flex gap-4">
-                                <div className="flex-1 bg-white p-2 rounded-2xl shadow-sm border border-gray-100 focus-within:ring-2 focus-within:ring-blue-500 transition">
-                                    <label className="flex items-center gap-1.5 text-xs font-bold text-gray-500 ml-2 mt-1"><Users size={14}/> 누구와</label>
-                                    <select className="w-full p-2 bg-transparent outline-none text-gray-800 font-semibold text-sm cursor-pointer" value={formData.companion} onChange={e => setFormData({...formData, companion: e.target.value})}>
+                            <div className="w-full rounded-2xl border border-[#ddd2bf] bg-white p-2 shadow-sm transition focus-within:ring-2 focus-within:ring-[#d6f0ee]">
+                                <label className="ml-2 mt-1 flex items-center gap-1.5 text-xs font-bold text-[#6e7685]"><BedDouble size={14}/> 예약한 숙소 (선택)</label>
+                                <input type="text" className="w-full bg-transparent p-2 text-sm font-semibold text-[#1f2430] outline-none" placeholder="예: 신라호텔 (비워두면 AI가 추천!)" value={formData.accommodation} onChange={e => setFormData({...formData, accommodation: e.target.value})} />
+                            </div>
+
+                            <div className="flex flex-col gap-4 sm:flex-row">
+                                <div className="flex-1 rounded-2xl border border-[#ddd2bf] bg-white p-2 shadow-sm transition focus-within:ring-2 focus-within:ring-[#d6f0ee]">
+                                    <label className="ml-2 mt-1 flex items-center gap-1.5 text-xs font-bold text-[#6e7685]"><Calendar size={14}/> 가는 날</label>
+                                    <input type="date" className="w-full bg-transparent p-2 text-sm font-semibold text-[#1f2430] outline-none" value={formData.startDate} onChange={e => setFormData({...formData, startDate: e.target.value})} />
+                                </div>
+                                <div className="flex-1 rounded-2xl border border-[#ddd2bf] bg-white p-2 shadow-sm transition focus-within:ring-2 focus-within:ring-[#d6f0ee]">
+                                    <label className="ml-2 mt-1 flex items-center gap-1.5 text-xs font-bold text-[#6e7685]"><Calendar size={14}/> 오는 날</label>
+                                    <input type="date" className="w-full bg-transparent p-2 text-sm font-semibold text-[#1f2430] outline-none" value={formData.endDate} onChange={e => setFormData({...formData, endDate: e.target.value})} />
+                                </div>
+                            </div>
+
+                            <div className="flex flex-col gap-4 sm:flex-row">
+                                <div className="flex-1 rounded-2xl border border-[#ddd2bf] bg-white p-2 shadow-sm transition focus-within:ring-2 focus-within:ring-[#d6f0ee]">
+                                    <label className="ml-2 mt-1 flex items-center gap-1.5 text-xs font-bold text-[#6e7685]"><Users size={14}/> 누구와</label>
+                                    <select className="w-full cursor-pointer bg-transparent p-2 text-sm font-semibold text-[#1f2430] outline-none" value={formData.companion} onChange={e => setFormData({...formData, companion: e.target.value})}>
                                         <option>혼자</option><option>친구와</option><option>연인과</option><option>가족과</option>
                                     </select>
                                 </div>
-                                <div className="flex-[2] bg-white p-2 rounded-2xl shadow-sm border border-gray-100 focus-within:ring-2 focus-within:ring-blue-500 transition">
-                                    <label className="flex items-center gap-1.5 text-xs font-bold text-gray-500 ml-2 mt-1"><Star size={14}/> 여행 테마</label>
-                                    <input type="text" className="w-full p-2 bg-transparent outline-none text-gray-800 font-semibold text-sm" placeholder="예: 맛집 탐방, 힐링" value={formData.style} onChange={e => setFormData({...formData, style: e.target.value})} />
+                                <div className="flex-[2] rounded-2xl border border-[#ddd2bf] bg-white p-2 shadow-sm transition focus-within:ring-2 focus-within:ring-[#d6f0ee]">
+                                    <label className="ml-2 mt-1 flex items-center gap-1.5 text-xs font-bold text-[#6e7685]"><Star size={14}/> 여행 테마</label>
+                                    <input type="text" className="w-full bg-transparent p-2 text-sm font-semibold text-[#1f2430] outline-none" placeholder="예: 맛집 탐방, 힐링" value={formData.style} onChange={e => setFormData({...formData, style: e.target.value})} />
                                 </div>
                             </div>
 
-                            <div className="pt-2 flex gap-3">
-                                <button onClick={() => setIsModalOpen(false)} className="flex-1 py-4 rounded-2xl font-bold text-gray-600 bg-gray-200 hover:bg-gray-300 transition">취소</button>
-                                <button onClick={submitPlan} className="flex-[2] py-4 rounded-2xl font-black text-white bg-blue-600 hover:bg-blue-700 shadow-lg hover:shadow-xl transition transform hover:-translate-y-0.5">
-                                    AI 일정 생성하기 🚀
+                            <div className="flex flex-col gap-3 pt-2 sm:flex-row">
+                                <button onClick={() => setIsModalOpen(false)} className="flex-1 rounded-2xl bg-[#e7dfd1] py-4 font-bold text-[#5d6573] transition hover:bg-[#ddd3c1]">취소</button>
+                                <button onClick={submitPlan} className="flex-[2] rounded-2xl bg-[#0f7a80] py-4 font-black text-white shadow-lg transition hover:-translate-y-0.5 hover:bg-[#0c686d] hover:shadow-xl">
+                                    AI 일정 생성하기
                                 </button>
                             </div>
                         </div>

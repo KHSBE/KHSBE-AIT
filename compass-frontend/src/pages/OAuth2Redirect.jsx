@@ -21,8 +21,12 @@ export default function OAuth2Redirect() {
     }, [searchParams, navigate]);
 
     return (
-        <div className="flex h-screen items-center justify-center">
-            <h2 className="text-2xl font-bold text-gray-600 animate-pulse">로그인 처리 중입니다... 🚀</h2>
+        <div className="flex min-h-[calc(100vh-76px)] items-center justify-center px-4">
+            <div className="rounded-3xl border border-[#d9cfbf] bg-[#fffdf8]/95 px-8 py-10 text-center shadow-[0_24px_56px_rgba(82,72,46,0.15)]">
+                <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#8a7c65]">OAuth Redirect</p>
+                <h2 className="mt-3 text-2xl font-black text-[#1f2430]">로그인 처리 중입니다</h2>
+                <p className="mt-2 animate-pulse text-sm text-[#5e6673]">잠시만 기다려주세요...</p>
+            </div>
         </div>
     );
 }

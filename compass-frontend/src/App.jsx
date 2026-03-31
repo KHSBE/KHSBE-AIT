@@ -1,4 +1,5 @@
 import { BrowserRouter as Router, Routes, Route, Link, useNavigate, Navigate } from 'react-router-dom';
+import { LayoutDashboard, UserRound, LogOut } from 'lucide-react';
 import Home from './pages/Home';
 import Planner from './pages/Planner';
 import Login from './pages/Login';
@@ -29,26 +30,34 @@ function Navigation() {
   };
 
   return (
-      // ★ 글래스모피즘(반투명 블러) 적용! 스크롤 내릴 때 뒤에가 살짝 비칩니다.
-      <nav className="bg-white/80 backdrop-blur-md border-b border-gray-100 p-4 flex justify-between items-center px-6 md:px-10 sticky top-0 z-50 transition-all duration-300">
+      <nav className="sticky top-0 z-50 border-b border-[#d9cfbf]/70 bg-[#fffdf8]/85 backdrop-blur-xl">
+        <div className="mx-auto flex h-[76px] w-full max-w-7xl items-center justify-between px-4 md:px-8">
+          <Link to="/" className="group flex items-center gap-2">
+            <span className="h-2 w-2 rounded-full bg-[#ff6a3d] shadow-[0_0_0_6px_rgba(255,106,61,0.15)] transition group-hover:scale-110" />
+            <span className="serif-display text-[30px] leading-none tracking-tight text-[#1a212c] md:text-3xl">Compass</span>
+          </Link>
 
-        {/* 로고: 그라데이션 컬러로 트렌디하게 변경 */}
-        <Link to="/" className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-indigo-600 tracking-tight hover:opacity-80 transition">
-          Compass
-        </Link>
+          <div className="flex items-center gap-1 text-sm font-semibold md:gap-2">
+            <Link to="/planner" className="hidden rounded-full px-4 py-2 text-[#586171] transition hover:bg-[#ece5d8] hover:text-[#0f7a80] sm:inline-flex">AI 플래너</Link>
+            <Link to="/planner" className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-[#d7ccbb] bg-[#fff8ed] text-[#5a4d3b] transition hover:border-[#0f7a80] hover:text-[#0f7a80] sm:hidden" aria-label="AI 플래너">
+              <LayoutDashboard size={17} />
+            </Link>
 
-        {/* 메뉴 버튼들: 간격과 호버(Hover) 효과를 고급스럽게 다듬음 */}
-        <div className="font-bold flex items-center text-[15px] gap-1 md:gap-2">
-          <Link to="/planner" className="px-4 py-2 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded-full transition">AI 플래너</Link>
-
-          {isLoggedIn ? (
+            {isLoggedIn ? (
               <>
-                <Link to="/mypage" className="px-4 py-2 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded-full transition">마이페이지</Link>
-                <button onClick={handleLogout} className="ml-2 px-5 py-2 bg-gray-100 text-gray-600 rounded-full hover:bg-red-50 hover:text-red-600 transition">로그아웃</button>
+                <Link to="/mypage" className="hidden rounded-full px-4 py-2 text-[#586171] transition hover:bg-[#ece5d8] hover:text-[#0f7a80] sm:inline-flex">마이페이지</Link>
+                <Link to="/mypage" className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-[#d7ccbb] bg-[#fff8ed] text-[#5a4d3b] transition hover:border-[#0f7a80] hover:text-[#0f7a80] sm:hidden" aria-label="마이페이지">
+                  <UserRound size={17} />
+                </Link>
+                <button onClick={handleLogout} className="ml-1 inline-flex items-center gap-1 rounded-full border border-[#d7ccbb] bg-[#fff8ed] px-3 py-2 text-[#55493a] transition hover:border-[#ff6a3d] hover:text-[#c0502a] sm:px-4">
+                  <LogOut size={15} />
+                  <span className="hidden sm:inline">로그아웃</span>
+                </button>
               </>
-          ) : (
-              <Link to="/login" className="ml-2 px-6 py-2 bg-blue-600 text-white rounded-full hover:bg-blue-700 shadow-sm hover:shadow-md transition transform hover:-translate-y-0.5">로그인</Link>
-          )}
+            ) : (
+              <Link to="/login" className="ml-1 rounded-full bg-[#0f7a80] px-4 py-2 text-white shadow-[0_10px_20px_rgba(15,122,128,0.25)] transition hover:-translate-y-0.5 hover:bg-[#0c686d] sm:px-5">로그인</Link>
+            )}
+          </div>
         </div>
       </nav>
   );
@@ -57,19 +66,20 @@ function Navigation() {
 function App() {
   return (
       <Router>
-        {/* 전체 배경색을 살짝 차분한 회색(gray-50)으로 깔아줍니다 */}
-        <div className="min-h-screen bg-gray-50 text-gray-800">
+        <div className="page-shell text-[#1a212c]">
           <Navigation />
-          <Routes>
-            <Route path="/" element={<Home />} />
-            <Route path="/login" element={<Login />} />
-            <Route path="/signup" element={<Signup />} />
-            <Route path="/oauth2/redirect" element={<OAuth2Redirect />} />
+          <main className="relative z-10">
+            <Routes>
+              <Route path="/" element={<Home />} />
+              <Route path="/login" element={<Login />} />
+              <Route path="/signup" element={<Signup />} />
+              <Route path="/oauth2/redirect" element={<OAuth2Redirect />} />
 
-            <Route path="/planner" element={<ProtectedRoute><Planner /></ProtectedRoute>} />
-            <Route path="/mypage" element={<ProtectedRoute><MyPage /></ProtectedRoute>} />
-            <Route path="/plans/:id" element={<ProtectedRoute><PlanDetail /></ProtectedRoute>} />
-          </Routes>
+              <Route path="/planner" element={<ProtectedRoute><Planner /></ProtectedRoute>} />
+              <Route path="/mypage" element={<ProtectedRoute><MyPage /></ProtectedRoute>} />
+              <Route path="/plans/:id" element={<ProtectedRoute><PlanDetail /></ProtectedRoute>} />
+            </Routes>
+          </main>
         </div>
       </Router>
   );

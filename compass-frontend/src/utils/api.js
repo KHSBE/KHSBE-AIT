@@ -1,5 +1,17 @@
 // src/utils/api.js
+export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
+
+export const buildApiUrl = (path) => {
+    if (path.startsWith('http://') || path.startsWith('https://')) {
+        return path;
+    }
+    return `${API_BASE_URL}${path.startsWith('/') ? '' : '/'}${path}`;
+};
+
+export const GOOGLE_OAUTH2_URL = buildApiUrl('/oauth2/authorization/google');
+
 export const fetchWithAuth = async (url, options = {}) => {
+    const requestUrl = buildApiUrl(url);
     let token = localStorage.getItem('accessToken');
 
     // 헤더에 토큰 세팅
@@ -9,7 +21,7 @@ export const fetchWithAuth = async (url, options = {}) => {
     };
 
     // 1차 API 호출
-    let response = await fetch(url, { ...options, headers });
+    let response = await fetch(requestUrl, { ...options, headers });
 
     // ★ 401(토큰 만료) 에러가 발생했다면?! (몰래 토큰 갱신 시도)
     if (response.status === 401) {
@@ -24,7 +36,7 @@ export const fetchWithAuth = async (url, options = {}) => {
 
         try {
             // 백엔드에 토큰 갱신 요청
-            const refreshRes = await fetch('http://localhost:8080/api/auth/refresh', {
+            const refreshRes = await fetch(buildApiUrl('/api/auth/refresh'), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ refreshToken })
@@ -38,7 +50,7 @@ export const fetchWithAuth = async (url, options = {}) => {
                 localStorage.setItem('accessToken', token);
 
                 headers['Authorization'] = `Bearer ${token}`;
-                response = await fetch(url, { ...options, headers }); // 2차 재시도
+                response = await fetch(requestUrl, { ...options, headers }); // 2차 재시도
             } else {
                 // 갱신 실패 (Refresh 토큰도 14일 지나서 죽음)
                 throw new Error('Refresh failed');

@@ -1,45 +1,43 @@
 import { Link } from 'react-router-dom';
-import { Mail, Lock, User } from 'lucide-react';
+import { Sparkles } from 'lucide-react';
+import { GOOGLE_OAUTH2_URL } from '../utils/api';
 
 export default function Signup() {
+    const handleGoogleSignup = () => {
+        window.location.href = GOOGLE_OAUTH2_URL;
+    };
+
     return (
-        <div className="flex items-center justify-center min-h-[calc(100vh-80px)] px-4 py-10">
-            <div className="bg-white p-8 rounded-3xl shadow-lg border border-gray-100 w-full max-w-md animate-in fade-in zoom-in duration-300">
-                <h2 className="text-3xl font-black text-center text-gray-800 mb-2">시작하기 🚀</h2>
-                <p className="text-center text-gray-500 mb-8">무료로 가입하고 AI 일정을 무제한으로 짜보세요</p>
+        <div className="flex min-h-[calc(100vh-76px)] items-center justify-center px-4 py-8">
+            <div className="w-full max-w-md rounded-[32px] border border-[#d9cfbf] bg-[#fffdf8]/95 p-8 shadow-[0_24px_60px_rgba(82,72,46,0.15)] md:p-10">
+                <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#8a7c65]">Create Account</p>
+                <h1 className="mt-3 text-3xl font-black text-[#1a212c]">구글로 회원가입</h1>
+                <p className="mt-2 text-sm text-[#5e6673]">Compass는 Google OAuth만 사용합니다. 처음 로그인하면 계정이 자동 생성됩니다.</p>
 
-                <form className="space-y-5">
-                    <div>
-                        <label className="block text-sm font-semibold text-gray-700 mb-1">이름</label>
-                        <div className="relative">
-                            <User className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
-                            <input type="text" placeholder="홍길동" className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none transition" />
-                        </div>
-                    </div>
+                <div className="mt-7 rounded-2xl border border-[#ddd2bf] bg-[#fff8ee] p-4 text-sm text-[#5e6673]">
+                    <p className="flex items-center gap-2 font-semibold text-[#4a5565]">
+                        <Sparkles size={16} className="text-[#ff6a3d]" />
+                        별도 회원가입 폼 없이 바로 시작
+                    </p>
+                    <p className="mt-2 text-xs leading-relaxed">
+                        Google 인증 완료 후 자동으로 회원 정보가 생성되고, 바로 플래너 화면으로 이동합니다.
+                    </p>
+                </div>
 
-                    <div>
-                        <label className="block text-sm font-semibold text-gray-700 mb-1">이메일</label>
-                        <div className="relative">
-                            <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
-                            <input type="email" placeholder="example@compass.com" className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none transition" />
-                        </div>
-                    </div>
+                <button
+                    type="button"
+                    onClick={handleGoogleSignup}
+                    className="mt-6 flex w-full items-center justify-center gap-2 rounded-2xl border border-[#d7cbb8] bg-white px-5 py-3.5 text-sm font-bold text-[#2f3542] transition hover:-translate-y-0.5 hover:border-[#0f7a80] hover:shadow-[0_10px_24px_rgba(15,122,128,0.15)]"
+                >
+                    <img src="https://www.svgrepo.com/show/475656/google-color.svg" alt="Google" className="h-5 w-5" />
+                    Google 계정으로 회원가입
+                </button>
 
-                    <div>
-                        <label className="block text-sm font-semibold text-gray-700 mb-1">비밀번호</label>
-                        <div className="relative">
-                            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
-                            <input type="password" placeholder="8자리 이상 입력해주세요" className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none transition" />
-                        </div>
-                    </div>
-
-                    <button type="button" className="w-full py-3.5 mt-4 bg-gray-800 text-white font-bold rounded-xl hover:bg-gray-900 transition shadow-md">
-                        이메일로 회원가입
-                    </button>
-                </form>
-
-                <p className="mt-8 text-center text-sm text-gray-600">
-                    이미 계정이 있으신가요? <Link to="/login" className="text-blue-600 font-bold hover:underline">로그인</Link>
+                <p className="mt-8 text-center text-sm text-[#5e6673]">
+                    이미 계정이 있으신가요?{' '}
+                    <Link to="/login" className="font-bold text-[#0f7a80] underline-offset-4 hover:underline">
+                        로그인
+                    </Link>
                 </p>
             </div>
         </div>

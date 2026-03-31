@@ -3,37 +3,53 @@ import { Map, Plane, Calendar } from 'lucide-react';
 
 export default function Home() {
     return (
-        <div className="flex flex-col items-center justify-center py-20 px-4">
-            <h1 className="text-5xl font-extrabold text-center mb-6 leading-tight">
-                나만의 완벽한 여행, <br />
-                <span className="text-blue-600">AI가 1분 만에</span> 짜드립니다
-            </h1>
-            <p className="text-lg text-gray-500 mb-10 text-center max-w-xl">
-                어디로 갈지, 무엇을 할지 고민하지 마세요. Compass AI가 당신의 취향과 동선을 완벽하게 분석하여 맞춤형 일정을 제안합니다.
-            </p>
+        <div className="mx-auto w-full max-w-7xl px-4 py-8 md:px-8 md:py-20">
+            <div className="reveal-up relative overflow-hidden rounded-[28px] border border-[#ddd2bf] bg-[#fffdf8]/90 px-5 py-8 shadow-[0_30px_80px_rgba(91,80,52,0.12)] md:rounded-[34px] md:px-12 md:py-14">
+                <div className="absolute -left-20 top-16 h-52 w-52 rounded-full bg-[#ff6a3d]/15 blur-3xl" />
+                <div className="absolute -right-12 bottom-10 h-64 w-64 rounded-full bg-[#0f7a80]/18 blur-3xl" />
 
-            {/* AI 플래너로 넘어가는 핵심 버튼 */}
-            <Link to="/planner" className="px-8 py-4 bg-blue-600 text-white text-xl font-bold rounded-full shadow-lg hover:bg-blue-700 hover:-translate-y-1 transition transform flex items-center gap-2">
-                <Plane size={24} />
-                AI 플래너 시작하기
-            </Link>
+                <div className="relative z-10">
+                    <p className="mb-5 inline-flex items-center rounded-full border border-[#d7cbb8] bg-[#f7efe1] px-4 py-2 text-xs font-bold uppercase tracking-[0.18em] text-[#6b5e4b]">
+                        AI Personal Travel Studio
+                    </p>
 
-            {/* 서비스 특징 소개 (와이어프레임 느낌 살리기) */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mt-24 max-w-5xl w-full">
-                <div className="p-6 bg-white rounded-2xl shadow-sm text-center border border-gray-100">
-                    <Map className="w-12 h-12 text-blue-500 mx-auto mb-4" />
-                    <h3 className="text-xl font-bold mb-2">동선 최적화</h3>
-                    <p className="text-gray-500">길에서 버리는 시간 없이, 가장 효율적인 이동 경로를 찾아드려요.</p>
+                    <h1 className="serif-display max-w-3xl text-[34px] leading-tight text-[#1a212c] md:text-6xl">
+                        여행의 첫 초안을
+                        <span className="ml-1 text-[#0f7a80] md:ml-2">가장 실용적인 동선</span>으로.
+                    </h1>
+
+                    <p className="mt-6 max-w-2xl text-base leading-relaxed text-[#5e6673] md:text-lg">
+                        Compass는 취향, 이동 거리, 일정 밀도를 함께 고려해 여행 계획을 만들어 줍니다.
+                        마음에 들지 않으면 바로 수정하고, 일정은 지도에서 바로 확인할 수 있습니다.
+                    </p>
+
+                    <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+                        <Link to="/planner" className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-[#0f7a80] px-7 py-3.5 text-base font-bold text-white shadow-[0_16px_30px_rgba(15,122,128,0.3)] transition hover:-translate-y-0.5 hover:bg-[#0c686d] sm:w-auto">
+                            <Plane size={18} />
+                            AI 플래너 시작하기
+                        </Link>
+                        <Link to="/mypage" className="inline-flex w-full items-center justify-center rounded-full border border-[#d8ccba] bg-[#fffaf0] px-7 py-3.5 text-base font-bold text-[#5f4d3e] transition hover:border-[#ff6a3d] hover:text-[#c0502a] sm:w-auto">
+                            저장된 일정 보기
+                        </Link>
+                    </div>
                 </div>
-                <div className="p-6 bg-white rounded-2xl shadow-sm text-center border border-gray-100">
-                    <Calendar className="w-12 h-12 text-blue-500 mx-auto mb-4" />
-                    <h3 className="text-xl font-bold mb-2">맞춤형 일정</h3>
-                    <p className="text-gray-500">누구와 함께 가는지, 어떤 테마를 원하는지 알려주시면 딱 맞게 짜드려요.</p>
+            </div>
+
+            <div className="mt-7 grid grid-cols-1 gap-4 md:mt-10 md:gap-5 md:grid-cols-3">
+                <div className="reveal-up rounded-3xl border border-[#dfd3c1] bg-[#fffdf8]/95 p-6 shadow-[0_12px_36px_rgba(77,68,45,0.08)]">
+                    <Map className="mb-4 h-11 w-11 rounded-2xl bg-[#d6f0ee] p-2.5 text-[#0f7a80]" />
+                    <h3 className="text-lg font-extrabold text-[#1f2430]">동선 중심 추천</h3>
+                    <p className="mt-2 text-sm leading-relaxed text-[#616978]">장소를 예쁘게 나열하는 대신, 실제 이동이 편한 순서로 일정을 구성합니다.</p>
                 </div>
-                <div className="p-6 bg-white rounded-2xl shadow-sm text-center border border-gray-100">
-                    <Plane className="w-12 h-12 text-blue-500 mx-auto mb-4" />
-                    <h3 className="text-xl font-bold mb-2">원클릭 저장</h3>
-                    <p className="text-gray-500">마음에 드는 일정은 저장하고 언제든 마이페이지에서 꺼내볼 수 있어요.</p>
+                <div className="reveal-up rounded-3xl border border-[#dfd3c1] bg-[#fffdf8]/95 p-6 shadow-[0_12px_36px_rgba(77,68,45,0.08)] [animation-delay:120ms]">
+                    <Calendar className="mb-4 h-11 w-11 rounded-2xl bg-[#ffe4d9] p-2.5 text-[#ff6a3d]" />
+                    <h3 className="text-lg font-extrabold text-[#1f2430]">대화형 일정 설계</h3>
+                    <p className="mt-2 text-sm leading-relaxed text-[#616978]">대화로 방향을 잡고, 세부 정보는 모달 입력으로 정교하게 완성할 수 있습니다.</p>
+                </div>
+                <div className="reveal-up rounded-3xl border border-[#dfd3c1] bg-[#fffdf8]/95 p-6 shadow-[0_12px_36px_rgba(77,68,45,0.08)] [animation-delay:220ms]">
+                    <Plane className="mb-4 h-11 w-11 rounded-2xl bg-[#d6f0ee] p-2.5 text-[#0f7a80]" />
+                    <h3 className="text-lg font-extrabold text-[#1f2430]">지도 연동 확인</h3>
+                    <p className="mt-2 text-sm leading-relaxed text-[#616978]">생성된 일정은 장소 좌표와 함께 저장되어 계획을 바로 지도 위에서 확인할 수 있습니다.</p>
                 </div>
             </div>
         </div>

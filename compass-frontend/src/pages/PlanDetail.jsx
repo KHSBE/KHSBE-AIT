@@ -3,7 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import { MapPin, Calendar, ChevronLeft, Loader2, BedDouble, Bot } from 'lucide-react';
 import { GoogleMap, useJsApiLoader, Marker, Polyline } from '@react-google-maps/api';
 // ★ 토큰 자동 갱신 마법 함수 가져오기!
-import { fetchWithAuth } from '../utils/api';
+import { fetchWithAuth, buildApiUrl } from '../utils/api';
 
 export default function PlanDetail() {
     const { id } = useParams();
@@ -22,7 +22,7 @@ export default function PlanDetail() {
         const fetchPlanDetail = async () => {
             try {
                 // ★ fetch -> fetchWithAuth 로 변경!
-                const response = await fetchWithAuth(`http://localhost:8080/api/plans/${id}`, {
+                const response = await fetchWithAuth(buildApiUrl(`/api/plans/${id}`), {
                     headers: { 'Content-Type': 'application/json' }
                 });
                 if (response.ok) {
@@ -56,54 +56,54 @@ export default function PlanDetail() {
         setMapInstance(map);
     }, []);
 
-    if (isLoading) return <div className="flex justify-center items-center h-[calc(100vh-80px)]"><Loader2 className="animate-spin text-blue-500" size={40} /></div>;
-    if (!plan) return <div className="p-20 text-center font-bold text-gray-500 text-xl">일정을 찾을 수 없습니다. 😢</div>;
+    if (isLoading) return <div className="flex h-[calc(100vh-76px)] items-center justify-center"><Loader2 className="animate-spin text-[#0f7a80]" size={40} /></div>;
+    if (!plan) return <div className="p-20 text-center text-xl font-bold text-[#5e6673]">일정을 찾을 수 없습니다.</div>;
 
     return (
-        <div className="flex flex-col lg:flex-row h-[calc(100vh-80px)] bg-gray-50 overflow-hidden animate-in fade-in duration-300">
+        <div className="flex min-h-[calc(100vh-76px)] flex-col bg-[#f7f1e6] lg:h-[calc(100vh-76px)] lg:flex-row lg:overflow-hidden">
 
             {/* ⬅️ 왼쪽 영역 (타임라인) */}
-            <div className="w-full lg:w-5/12 h-full overflow-y-auto border-r border-gray-200 bg-white">
-                <div className="sticky top-0 bg-white/95 backdrop-blur-md z-10 p-6 border-b border-gray-100 shadow-sm">
-                    <Link to="/mypage" className="inline-flex items-center text-sm font-bold text-gray-500 hover:text-blue-600 mb-4 transition">
+            <div className="h-auto w-full overflow-visible border-r-0 border-[#dbcfbd] bg-[#fffdf8] lg:h-full lg:w-5/12 lg:overflow-y-auto lg:border-r">
+                <div className="sticky top-0 z-10 border-b border-[#ddd2bf] bg-[#fffdf8]/95 p-4 shadow-sm backdrop-blur-md sm:p-6">
+                    <Link to="/mypage" className="mb-4 inline-flex items-center text-sm font-bold text-[#6a7280] transition hover:text-[#0f7a80]">
                         <ChevronLeft size={16} /> 목록으로 돌아가기
                     </Link>
-                    <h1 className="text-2xl font-black text-gray-800 leading-tight mb-3">{plan.title}</h1>
+                    <h1 className="mb-3 text-xl font-black leading-tight text-[#1f2430] sm:text-2xl">{plan.title}</h1>
 
-                    <div className="flex flex-wrap items-center gap-2 text-sm font-semibold text-gray-600">
-                        <span className="flex items-center gap-1.5 bg-blue-50 text-blue-700 px-3 py-1.5 rounded-lg"><MapPin size={16}/> {plan.region}</span>
-                        <span className="flex items-center gap-1.5 bg-gray-100 px-3 py-1.5 rounded-lg"><Calendar size={16}/> {plan.startDate} ~ {plan.endDate}</span>
+                    <div className="flex flex-wrap items-center gap-2 text-sm font-semibold text-[#5e6673]">
+                        <span className="flex items-center gap-1.5 rounded-lg bg-[#d6f0ee] px-3 py-1.5 text-[#0f7a80]"><MapPin size={16}/> {plan.region}</span>
+                        <span className="flex items-center gap-1.5 rounded-lg bg-[#efe6d6] px-3 py-1.5"><Calendar size={16}/> {plan.startDate} ~ {plan.endDate}</span>
                     </div>
 
-                    <div className="flex flex-wrap gap-2 mt-3 text-xs font-medium text-gray-500">
-                        {plan.departure && <span className="bg-gray-50 border border-gray-200 px-2 py-1 rounded">🛫 {plan.departure} 출발</span>}
-                        {plan.companion && <span className="bg-gray-50 border border-gray-200 px-2 py-1 rounded">👥 {plan.companion}</span>}
-                        {plan.style && <span className="bg-gray-50 border border-gray-200 px-2 py-1 rounded">✨ {plan.style}</span>}
+                    <div className="mt-3 flex flex-wrap gap-2 text-xs font-medium text-[#5e6673]">
+                        {plan.departure && <span className="rounded border border-[#ddd1bf] bg-[#f8f1e3] px-2 py-1">출발: {plan.departure}</span>}
+                        {plan.companion && <span className="rounded border border-[#ddd1bf] bg-[#f8f1e3] px-2 py-1">일행: {plan.companion}</span>}
+                        {plan.style && <span className="rounded border border-[#ddd1bf] bg-[#f8f1e3] px-2 py-1">테마: {plan.style}</span>}
                         {/* 숙소 표시 영역 추가! */}
-                        {plan.accommodation && <span className="bg-amber-50 text-amber-700 border border-amber-200 px-2 py-1 rounded flex items-center gap-1"><BedDouble size={14}/> {plan.accommodation}</span>}
+                        {plan.accommodation && <span className="flex items-center gap-1 rounded border border-[#ffd2c2] bg-[#fff0ea] px-2 py-1 text-[#b8512d]"><BedDouble size={14}/> {plan.accommodation}</span>}
                     </div>
                 </div>
 
-                <div className="p-6 space-y-8 pb-20">
+                <div className="space-y-8 p-4 pb-8 sm:p-6 sm:pb-20">
                     {plan.itineraries?.map((day) => (
                         <div key={day.id || day.dayNumber} className="relative">
-                            <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
-                                <span className="bg-blue-600 text-white px-3 py-1 rounded-lg text-sm shadow-sm">Day {day.dayNumber}</span>
+                            <h2 className="mb-4 flex items-center gap-2 text-xl font-bold text-[#1f2430]">
+                                <span className="rounded-lg bg-[#0f7a80] px-3 py-1 text-sm text-white shadow-sm">Day {day.dayNumber}</span>
                                 {day.theme}
                             </h2>
 
-                            <div className="space-y-4 pl-4 border-l-2 border-blue-100 ml-4 mt-2">
+                            <div className="ml-4 mt-2 space-y-4 border-l-2 border-[#bce0dd] pl-4">
                                 {day.places?.map((place, idx) => (
                                     <div key={place.id || idx} className="relative pl-6">
-                                        <div className="absolute -left-[21px] top-1 w-4 h-4 rounded-full bg-white border-4 border-blue-500 shadow-sm"></div>
-                                        <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100 hover:border-blue-300 hover:shadow-md transition cursor-pointer group">
-                                            <h3 className="text-lg font-bold text-gray-800 group-hover:text-blue-600 transition flex items-center gap-2">
-                                                <span className="bg-blue-100 text-blue-600 w-6 h-6 rounded-full flex items-center justify-center text-xs font-black">{idx + 1}</span>
+                                        <div className="absolute -left-[21px] top-1 h-4 w-4 rounded-full border-4 border-[#0f7a80] bg-white shadow-sm" />
+                                        <div className="group cursor-pointer rounded-2xl border border-[#ddd1bf] bg-[#fffaf1] p-4 transition hover:border-[#0f7a80] hover:shadow-md">
+                                            <h3 className="flex items-center gap-2 text-lg font-bold text-[#1f2430] transition group-hover:text-[#0f7a80]">
+                                                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#d6f0ee] text-xs font-black text-[#0f7a80]">{idx + 1}</span>
                                                 {place.placeName}
                                             </h3>
                                             {place.memo && (
-                                                <p className="text-gray-500 text-sm mt-3 leading-relaxed flex items-start gap-2 bg-white p-3 rounded-xl border border-gray-100">
-                                                    <Bot size={16} className="text-blue-400 mt-0.5 shrink-0" /> {place.memo}
+                                                <p className="mt-3 flex items-start gap-2 rounded-xl border border-[#e4dac9] bg-white p-3 text-sm leading-relaxed text-[#5e6673]">
+                                                    <Bot size={16} className="mt-0.5 shrink-0 text-[#0f7a80]" /> {place.memo}
                                                 </p>
                                             )}
                                         </div>
@@ -116,18 +116,18 @@ export default function PlanDetail() {
             </div>
 
             {/* ➡️ 오른쪽 영역 (지도) */}
-            <div className="hidden lg:block w-7/12 h-full bg-gray-200 relative">
+            <div className="relative h-[44vh] w-full border-t border-[#d8ccbb] bg-[#d9ddd8] lg:h-full lg:w-7/12 lg:border-t-0">
 
                 {/* ★ 마이리얼트립 스타일! 지도 위에 둥둥 떠 있는 Day 선택 탭 */}
-                <div className="absolute top-6 left-1/2 -translate-x-1/2 z-10 bg-white/90 backdrop-blur-md rounded-full shadow-lg p-1.5 flex gap-1 border border-gray-200 overflow-x-auto max-w-[90%]">
+                <div className="absolute left-1/2 top-3 z-10 flex max-w-[94%] -translate-x-1/2 gap-1 overflow-x-auto rounded-full border border-[#d8ccbb] bg-[#fffdf8]/92 p-1.5 shadow-lg backdrop-blur-md lg:top-6 lg:max-w-[90%]">
                     {plan.itineraries?.map(day => (
                         <button
                             key={day.dayNumber}
                             onClick={() => setSelectedDay(day.dayNumber)}
                             className={`px-5 py-2.5 rounded-full text-sm font-bold transition-all whitespace-nowrap ${
                                 selectedDay === day.dayNumber
-                                    ? 'bg-blue-600 text-white shadow-md'
-                                    : 'text-gray-500 hover:bg-gray-100'
+                                    ? 'bg-[#0f7a80] text-white shadow-md'
+                                    : 'text-[#5e6673] hover:bg-[#efe7d8]'
                             }`}
                         >
                             Day {day.dayNumber}
@@ -136,7 +136,7 @@ export default function PlanDetail() {
                 </div>
 
                 {!isLoaded ? (
-                    <div className="flex flex-col items-center justify-center h-full text-gray-500">
+                    <div className="flex h-full flex-col items-center justify-center text-[#5e6673]">
                         <Loader2 className="animate-spin mb-4" size={40} />
                         <p className="font-semibold">지도를 불러오는 중입니다...</p>
                     </div>
@@ -159,7 +159,7 @@ export default function PlanDetail() {
                         {currentDayPlaces.length > 1 && (
                             <Polyline
                                 path={currentDayPlaces.map(p => ({ lat: p.latitude, lng: p.longitude }))}
-                                options={{ strokeColor: '#2563eb', strokeOpacity: 0.8, strokeWeight: 4 }}
+                                options={{ strokeColor: '#0f7a80', strokeOpacity: 0.82, strokeWeight: 4 }}
                             />
                         )}
                     </GoogleMap>
