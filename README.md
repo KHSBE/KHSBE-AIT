@@ -1,77 +1,68 @@
 # Compass
 
-[![Backend](https://img.shields.io/badge/Backend-Spring%20Boot%203.4-6DB33F?logo=springboot&logoColor=white)](./backend)
-[![Frontend](https://img.shields.io/badge/Frontend-React%2019-61DAFB?logo=react&logoColor=black)](./compass-frontend)
-[![Database](https://img.shields.io/badge/Database-PostgreSQL%20%2B%20pgvector-4169E1?logo=postgresql&logoColor=white)](./docker-compose.yml)
-[![Infra](https://img.shields.io/badge/Infra-Docker%20Compose-2496ED?logo=docker&logoColor=white)](./docker-compose.yml)
+AI travel planner web app.  
+Users sign in with Google OAuth, enter trip info, and generate/save itinerary plans with an AI agent.
 
-AI 기반 개인화 여행 플래너입니다.  
-Google OAuth 로그인 후, 대화형으로 여행 요청을 입력하면 AI가 일정(JSON)을 생성하고 DB에 저장합니다.
+## Live
+- Frontend: `https://www.compass-travel.site`
+- Backend API: `https://api.compass-travel.site`
 
----
+## Core Features
+- Google OAuth login + JWT/Refresh token auth
+- AI itinerary generation (`POST /api/agent/plan`)
+- Chat sessions/messages (`/api/chat/sessions`)
+- My plans list/detail/delete (`/api/plans`)
+- Map visualization (Google Maps Marker/Polyline)
 
-## 주요 기능
+## Tech Stack
+| Layer | Stack |
+| --- | --- |
+| Frontend | React 19, Vite 8, React Router, Tailwind CSS v4 |
+| Backend | Java 17, Spring Boot 3.4, Spring Security, OAuth2, JWT, JPA, Querydsl, Spring AI |
+| Data | PostgreSQL (+ pgvector), Redis |
+| Infra | Docker Compose, Caddy, AWS EC2, Vercel |
 
-- Google OAuth 로그인 + JWT/Refresh Token 인증
-- AI 대화형 여행 일정 생성 (`PLAN_CREATION` 의도 분류)
-- 채팅 세션/메시지 저장 및 이력 조회
-- 마이페이지에서 내 여행 일정 목록/상세 조회
-- 일정 상세 지도 시각화 (Google Maps Marker/Polyline)
-- 만료 토큰 자동 재발급 (`/api/auth/refresh`)
-
----
-
-## 기술 스택
-
-### Backend
-- Java 17
-- Spring Boot 3.4.1
-- Spring Security, OAuth2 Client, JWT
-- Spring Data JPA, Querydsl
-- Spring AI (Google GenAI)
-- PostgreSQL, Redis
-
-### Frontend
-- React 19 + Vite 8
-- React Router
-- Tailwind CSS v4
-- Google Maps JS API
-
-### Infra
-- Docker / Docker Compose
-- pgvector (ankane/pgvector)
-
----
-
-## 아키텍처
-
+## Architecture
 ```mermaid
 flowchart LR
-    U["User (Web)"] --> F["Frontend (Vite/React)"]
-    F -->|OAuth 시작| B["Backend (Spring Boot)"]
-    B -->|OAuth Callback + JWT 발급| F
-    F -->|Bearer Token API| B
-    B --> D["PostgreSQL (plans/chat/users)"]
+    U["User"] --> F["Frontend (Vercel)"]
+    F -->|OAuth/API| B["Backend (EC2)"]
+    B --> DB["PostgreSQL"]
     B --> R["Redis"]
-    B --> A["Google GenAI + Weather API"]
-    F --> M["Google Maps API"]
+    B --> G["Gemini API"]
 ```
 
----
+## API Scope
+- `GET /api/agent/chat`
+- `POST /api/agent/plan`
+- `GET /api/chat/sessions`
+- `GET /api/chat/sessions/{sessionId}/messages`
+- `DELETE /api/chat/sessions/{sessionId}`
+- `GET /api/plans`
+- `GET /api/plans/{planId}`
+- `DELETE /api/plans/{planId}`
+- `GET /api/user/me`
+- `POST /api/user/preference`
+- `POST /api/auth/refresh`
 
-## 로컬 실행
+## Project Structure
+```text
+KHS-BE/
+├─ backend/                    # Spring Boot API
+├─ compass-frontend/           # React + Vite
+├─ docs/                       # project docs
+├─ docker-compose.yml          # local DB/Redis
+├─ docker-compose.prod.yml     # production deployment
+└─ Caddyfile                   # reverse proxy
+```
 
-### 1) 사전 준비
-- Java 17
-- Node.js 20+
-- Docker Desktop
-
-### 2) 인프라 실행
+## Local Setup
+### 1) Infra
 ```bash
 docker compose up -d
 ```
 
-### 3) Backend 실행
+### 2) Backend
 ```bash
 cd backend
 ./gradlew bootRun
@@ -82,28 +73,17 @@ cd backend
 .\gradlew.bat bootRun
 ```
 
-### 4) Frontend 실행
+### 3) Frontend
 ```bash
 cd compass-frontend
 npm install
 npm run dev
 ```
 
-### 5) 접속 주소
-- Frontend: `http://localhost:5173`
-- Backend: `http://localhost:8080`
-- PostgreSQL: `localhost:5433`
-- Redis: `localhost:6379`
-
----
-
-## 환경변수
-
-### 루트 `.env` (Backend용)
-
-필수 키:
-
+## Environment Variables
+Backend root `.env`:
 - `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USERNAME`, `DB_PASSWORD`
+- `REDIS_HOST`, `REDIS_PORT`
 - `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`
 - `GOOGLE_AI_STUDIO_API_KEY`
 - `JWT_SECRET`
@@ -111,39 +91,16 @@ npm run dev
 - `CORS_ALLOWED_ORIGINS`
 - `OAUTH2_REDIRECT_URI`
 
-### `compass-frontend/.env`
-
+Frontend `compass-frontend/.env`:
 - `VITE_API_BASE_URL`
 - `VITE_GOOGLE_MAPS_API_KEY`
 
-예시는 [compass-frontend/.env.example](./compass-frontend/.env.example) 참고.
+## Docs
+- [Docs Index](/C:/Users/momki/Desktop/KHS-BE/docs/README.md)
+- [Architecture](/C:/Users/momki/Desktop/KHS-BE/docs/아키텍처.md)
+- [ERD](/C:/Users/momki/Desktop/KHS-BE/docs/erd.md)
+- [Server Runbook](/C:/Users/momki/Desktop/KHS-BE/docs/서버_운영_런북.md)
 
----
+## License
+See `LICENSE`.
 
-## 프로젝트 구조
-
-```text
-KHS-BE/
-├─ backend/                    # Spring Boot API
-│  └─ src/main/java/com/compass
-│     ├─ domain/agent|plan|user
-│     └─ global/config|common|error
-├─ compass-frontend/           # React + Vite Web
-│  └─ src/pages|utils
-├─ docs/                       # 설계/배포 문서
-└─ docker-compose.yml          # 로컬 DB/Redis
-```
-
----
-
-## 배포 가이드
-
-가성비형 배포 절차는 아래 문서 참고:
-
-- [docs/가성비_배포_실행가이드.md](./docs/가성비_배포_실행가이드.md)
-
----
-
-## 라이선스
-
-See [LICENSE](./LICENSE).

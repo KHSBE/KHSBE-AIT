@@ -1,80 +1,89 @@
-erDiagram
-USERS ||--o| USER_PREFERENCES : "defines"
-USERS ||--o{ TRAVEL_PLANS : "owns"
-USERS ||--o{ CHAT_SESSIONS : "starts"
+# ERD
 
-    TRAVEL_PLANS ||--o{ ITINERARIES : "structured_by"
-    TRAVEL_PLANS ||--o{ CHAT_SESSIONS : "associated_with"
-    
-    ITINERARIES ||--o{ PLACES : "contains"
-    
-    CHAT_SESSIONS ||--o{ CHAT_MESSAGES : "recorded_in"
+현재 JPA 엔티티 기준으로 정리한 ERD입니다.
+
+```mermaid
+erDiagram
+    USERS ||--o| USER_PREFERENCE : has
+    USERS ||--o{ TRAVEL_PLANS : owns
+    USERS ||--o{ CHAT_SESSIONS : starts
+
+    TRAVEL_PLANS ||--o{ ITINERARIES : contains
+    ITINERARIES ||--o{ PLACES : contains
+
+    CHAT_SESSIONS ||--o{ CHAT_MESSAGES : contains
+    CHAT_SESSIONS }o--o| TRAVEL_PLANS : optional_link
 
     USERS {
-        Long id PK "Auto Increment"
-        String email UK "로그인 ID"
-        String password "암호화된 비번"
-        String nickname "사용자 이름"
-        String role "ROLE_USER, ROLE_ADMIN"
-        DateTime created_at
-        DateTime updated_at
+      bigint id PK
+      string email UK
+      string password
+      string nickname
+      datetime created_at
+      datetime updated_at
     }
 
-    USER_PREFERENCES {
-        Long id PK
-        Long user_id FK "Users 참조"
-        String preferred_category "식도락, 액티비티, 휴양 등 (JSON or CSV)"
-        String diet_restriction "다이어트/알레르기 정보 (AI 추천 가중치)"
-        Integer daily_budget "선호 일일 예산"
-        String travel_pace "느긋한, 타이트한"
+    USER_PREFERENCE {
+      bigint id PK
+      bigint user_id FK
+      string preferred_category
+      string diet_restriction
+      string travel_pace
     }
 
     TRAVEL_PLANS {
-        Long id PK
-        Long user_id FK
-        String title "여행 제목"
-        String region "여행지 (도시/국가)"
-        LocalDate start_date
-        LocalDate end_date
-        Boolean is_public "공유 여부"
-        String status "PLANNING, COMPLETED, DELETED"
-        DateTime created_at
+      bigint id PK
+      bigint user_id FK
+      string title
+      string region
+      string departure
+      string companion
+      string style
+      string accommodation
+      date start_date
+      date end_date
+      datetime created_at
+      datetime updated_at
     }
 
     ITINERARIES {
-        Long id PK
-        Long plan_id FK "TravelPlans 참조"
-        Integer day_number "n일차"
-        LocalDate travel_date "실제 여행 날짜"
-        String theme "해당 일차의 테마 (예: 힐링, 맛집탐방)"
+      bigint id PK
+      bigint travel_plan_id FK
+      int day_number
+      date travel_date
+      string theme
     }
 
     PLACES {
-        Long id PK
-        Long itinerary_id FK "Itineraries 참조"
-        String place_name "장소명"
-        String google_place_id "API 연동용 고유 ID"
-        String address
-        Double latitude
-        Double longitude
-        Integer visit_order "방문 순서 (정렬용)"
-        LocalTime arrival_time "예상 도착 시간"
-        Integer stay_duration "예상 체류 시간(분)"
-        String memo "에이전트의 한줄 팁"
+      bigint id PK
+      bigint itinerary_id FK
+      string place_name
+      string google_place_id
+      double latitude
+      double longitude
+      int visit_order
+      text memo
     }
 
     CHAT_SESSIONS {
-        Long id PK
-        Long user_id FK
-        Long plan_id FK "null 가능 (계획 생성 전 대화)"
-        String session_title "대화 요약 제목"
-        DateTime last_message_at
+      bigint id PK
+      bigint user_id FK
+      bigint plan_id FK
+      string session_title
+      datetime created_at
+      datetime updated_at
     }
 
     CHAT_MESSAGES {
-        Long id PK
-        Long session_id FK "ChatSessions 참조"
-        String sender_role "USER, ASSISTANT"
-        Text message_content "대화 텍스트"
-        DateTime sent_at
+      bigint id PK
+      bigint session_id FK
+      string sender_role
+      text content
+      datetime sent_at
     }
+```
+
+## 참고
+- `CHAT_SESSIONS.plan_id`는 nullable(선택 연결)입니다.
+- 타임스탬프(`created_at`, `updated_at`)는 `BaseEntity` 감사 필드로 관리됩니다.
+
