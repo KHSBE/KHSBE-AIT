@@ -99,6 +99,9 @@ const formatDurationKo = (durationMillis) => {
   return minutes ? `${hours}시간 ${minutes}분` : `${hours}시간`;
 };
 
+const isMobileViewport = () =>
+  typeof window !== 'undefined' && window.matchMedia('(max-width: 1023px)').matches;
+
 const computeRouteSegment = async (RouteClass, originPlace, destinationPlace, travelMode) => {
   const { routes } = await RouteClass.computeRoutes({
     origin: toLatLngLiteral(originPlace),
@@ -249,6 +252,7 @@ export default function PlanDetail() {
   const [isDirectionsDenied, setIsDirectionsDenied] = useState(false);
   const [selectedTravelMode, setSelectedTravelMode] = useState('DRIVING');
   const [isMapCollapsed, setIsMapCollapsed] = useState(false);
+  const [mobileView, setMobileView] = useState('plan');
   const placesServiceRef = useRef(null);
 
   const { isLoaded } = useJsApiLoader({
@@ -358,6 +362,10 @@ export default function PlanDetail() {
 
   useEffect(() => {
     setFocusedPlaceKey(null);
+  }, [selectedDay]);
+
+  useEffect(() => {
+    setMobileView('plan');
   }, [selectedDay]);
 
   useEffect(() => {
@@ -719,8 +727,33 @@ export default function PlanDetail() {
 
   return (
     <div className="flex min-h-[calc(100vh-76px)] flex-col bg-[#eef7ff] lg:h-[calc(100vh-76px)] lg:flex-row lg:overflow-hidden">
+      <div className="sticky top-0 z-20 border-b border-[#d6e9fa] bg-[#f9fdff]/95 p-2 backdrop-blur-md lg:hidden">
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            onClick={() => setMobileView('plan')}
+            className={`rounded-xl px-3 py-2 text-sm font-bold transition ${
+              mobileView === 'plan'
+                ? 'bg-[#1f8ef1] text-white shadow-sm'
+                : 'border border-[#cde4f8] bg-white text-[#2d587a]'
+            }`}
+          >
+            일정 보기
+          </button>
+          <button
+            onClick={() => setMobileView('map')}
+            className={`rounded-xl px-3 py-2 text-sm font-bold transition ${
+              mobileView === 'map'
+                ? 'bg-[#1f8ef1] text-white shadow-sm'
+                : 'border border-[#cde4f8] bg-white text-[#2d587a]'
+            }`}
+          >
+            지도 보기
+          </button>
+        </div>
+      </div>
+
       <div
-        className={`h-auto w-full overflow-visible border-r-0 border-[#d6e9fa] bg-[#f9fdff] lg:h-full lg:overflow-y-auto lg:border-r ${
+        className={`${mobileView === 'plan' ? 'block' : 'hidden'} h-auto w-full overflow-visible border-r-0 border-[#d6e9fa] bg-[#f9fdff] lg:block lg:h-full lg:overflow-y-auto lg:border-r ${
           isMapCollapsed ? 'lg:w-full' : 'lg:w-5/12'
         }`}
       >
@@ -831,6 +864,10 @@ export default function PlanDetail() {
                       onMouseLeave={() => focusable && setFocusedPlaceKey((prev) => (prev === placeKey ? null : prev))}
                       onClick={() => {
                         if (focusable) setFocusedPlaceKey(placeKey);
+                        if (focusable && !isEditMode && isMobileViewport()) {
+                          setMobileView('map');
+                          return;
+                        }
                         openPlaceDetail(place);
                       }}
                     >
@@ -896,7 +933,7 @@ export default function PlanDetail() {
       </div>
 
       <div
-        className={`relative h-[44vh] w-full border-t border-[#d6e9fa] bg-[#dceefe] lg:h-full lg:border-t-0 ${
+        className={`${mobileView === 'map' ? 'block' : 'hidden'} relative h-[calc(100vh-170px)] w-full border-t border-[#d6e9fa] bg-[#dceefe] lg:block lg:h-full lg:border-t-0 ${
           isMapCollapsed ? 'lg:hidden' : 'lg:w-7/12'
         }`}
       >
