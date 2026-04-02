@@ -1,9 +1,14 @@
 package com.compass.domain.agent.dto;
 
-// 여행 일정 생성 요청 DTO
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Positive;
+import jakarta.validation.constraints.Size;
+
 public record PlanRequest(
-        // 기존 세션 ID (null 가능)
+        @Positive(message = "sessionId는 양수여야 합니다.")
         Long sessionId,
-        // 사용자 요청 메시지
+
+        @NotBlank(message = "여행 요청 내용은 비어 있을 수 없습니다.")
+        @Size(max = 2000, message = "여행 요청 내용은 2000자 이하여야 합니다.")
         String request
 ) {}

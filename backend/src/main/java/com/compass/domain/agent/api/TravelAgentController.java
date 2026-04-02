@@ -11,6 +11,7 @@ import com.compass.domain.plan.application.PlanCommandService;
 import com.compass.domain.user.dao.UserRepository;
 import com.compass.global.common.ApiResponse;
 import com.compass.global.error.BusinessException;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
@@ -30,22 +31,18 @@ public class TravelAgentController {
 
     @PostMapping("/plan")
     @Transactional
-    public ApiResponse<AiPlanResponse> createPlan(@RequestBody PlanRequest req, Authentication auth) {
+    public ApiResponse<AiPlanResponse> createPlan(@Valid @RequestBody PlanRequest req, Authentication auth) {
         var user = userRepository.findByEmail(auth.getName())
                 .orElseThrow(() -> new BusinessException("사용자를 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
-
-        if (req == null || req.request() == null || req.request().isBlank()) {
-            throw new BusinessException("일정 요청 내용이 비어 있습니다.", HttpStatus.BAD_REQUEST);
-        }
 
         var trimmedRequest = req.request().trim();
         var session = (req.sessionId() != null)
                 ? sessionRepository.findByIdAndUserId(req.sessionId(), user.getId())
-                    .orElseThrow(() -> new BusinessException("해당 채팅 세션을 찾을 수 없습니다.", HttpStatus.NOT_FOUND))
+                .orElseThrow(() -> new BusinessException("해당 채팅 세션을 찾을 수 없습니다.", HttpStatus.NOT_FOUND))
                 : sessionRepository.save(ChatSession.builder()
-                    .user(user)
-                    .sessionTitle(trimmedRequest.substring(0, Math.min(trimmedRequest.length(), 10)) + "...")
-                    .build());
+                .user(user)
+                .sessionTitle(trimmedRequest.substring(0, Math.min(trimmedRequest.length(), 10)) + "...")
+                .build());
 
         var history = messageRepository.findAllBySessionIdOrderBySentAtAsc(session.getId());
 
@@ -60,7 +57,7 @@ public class TravelAgentController {
         messageRepository.save(ChatMessage.builder()
                 .session(session)
                 .senderRole("ASSISTANT")
-                .content("성공적으로 [" + aiRes.title() + "] 일정을 생성했습니다! DB 저장도 완료했습니다.")
+                .content("요청하신 일정 초안 생성을 완료했습니다.")
                 .build());
 
         planService.savePlanFromAi(user, aiRes);
@@ -68,4 +65,3 @@ public class TravelAgentController {
         return ApiResponse.success(aiRes);
     }
 }
-

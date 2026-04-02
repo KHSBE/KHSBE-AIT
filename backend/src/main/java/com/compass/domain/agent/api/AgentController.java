@@ -4,12 +4,17 @@ import com.compass.domain.agent.application.TravelAgentService;
 import com.compass.domain.agent.dto.ChatResponse;
 import com.compass.domain.user.dao.UserRepository;
 import com.compass.domain.user.domain.User;
+import com.compass.global.error.BusinessException;
+import jakarta.validation.constraints.NotBlank;
+import org.springframework.http.HttpStatus;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.security.Principal;
 
 @RestController
 @RequestMapping("/api/agent")
+@Validated
 public class AgentController {
 
     private final TravelAgentService travelAgentService;
@@ -22,16 +27,18 @@ public class AgentController {
 
     @GetMapping("/chat")
     public ChatResponse chat(
-            @RequestParam String message,
+            @RequestParam @NotBlank(message = "message 파라미터는 필수입니다.") String message,
             @RequestParam(required = false) Long sessionId,
-            Principal principal) { // ★ 여기도 Principal로 변경!
+            Principal principal) {
 
-        // 1. 현재 로그인한 유저 찾기 (principal.getName()은 보통 JWT 토큰 안의 이메일/ID를 반환합니다)
+        if (principal == null) {
+            throw new BusinessException("인증 정보가 없습니다.", HttpStatus.UNAUTHORIZED);
+        }
+
         String email = principal.getName();
         User user = userRepository.findByEmail(email)
-                .orElseThrow(() -> new RuntimeException("사용자를 찾을 수 없습니다."));
+                .orElseThrow(() -> new BusinessException("사용자를 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
 
-        // 2. 서비스로 위임
         return travelAgentService.chatWithAgent(user, sessionId, message);
     }
 }

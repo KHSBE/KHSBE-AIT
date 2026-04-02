@@ -1,8 +1,10 @@
 package com.compass.domain.user.api;
 
-import com.compass.global.config.auth.JwtTokenProvider;
 import com.compass.global.common.ApiResponse;
+import com.compass.global.config.auth.JwtTokenProvider;
+import com.compass.global.error.BusinessException;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
@@ -14,9 +16,12 @@ public class AuthController {
 
     private final JwtTokenProvider jwtTokenProvider;
 
-    // ★ 프론트엔드가 Refresh Token을 보내면 새 Access Token을 발급해주는 API
     @PostMapping("/refresh")
     public ApiResponse<Map<String, String>> refresh(@RequestBody Map<String, String> request) {
+        if (request == null || !request.containsKey("refreshToken")) {
+            throw new BusinessException("refreshToken이 필요합니다.", HttpStatus.BAD_REQUEST);
+        }
+
         String refreshToken = request.get("refreshToken");
 
         if (refreshToken != null && jwtTokenProvider.validateToken(refreshToken)) {
@@ -24,6 +29,7 @@ public class AuthController {
             String newAccessToken = jwtTokenProvider.createToken(email);
             return ApiResponse.success(Map.of("accessToken", newAccessToken));
         }
-        return ApiResponse.error("유효하지 않은 Refresh Token입니다. 다시 로그인해주세요.");
+
+        throw new BusinessException("유효하지 않은 refreshToken입니다. 다시 로그인해 주세요.", HttpStatus.UNAUTHORIZED);
     }
 }

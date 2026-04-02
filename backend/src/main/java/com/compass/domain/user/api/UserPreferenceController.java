@@ -5,7 +5,10 @@ import com.compass.domain.user.dao.UserRepository;
 import com.compass.domain.user.domain.User;
 import com.compass.domain.user.dto.UserPreferenceRequest;
 import com.compass.global.common.ApiResponse;
+import com.compass.global.error.BusinessException;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
@@ -19,16 +22,16 @@ public class UserPreferenceController {
 
     @PostMapping
     public ApiResponse<Void> updatePreference(
-            @RequestBody UserPreferenceRequest request,
+            @Valid @RequestBody UserPreferenceRequest request,
             Authentication authentication) {
 
         if (authentication == null) {
-            throw new RuntimeException("인증 정보가 없습니다.");
+            throw new BusinessException("인증 정보가 없습니다.", HttpStatus.UNAUTHORIZED);
         }
 
         String email = authentication.getName();
         User user = userRepository.findByEmail(email)
-                .orElseThrow(() -> new RuntimeException("사용자 정보를 찾을 수 없습니다."));
+                .orElseThrow(() -> new BusinessException("사용자를 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
 
         userPreferenceService.saveOrUpdate(user.getId(), request);
         return ApiResponse.success(null);
