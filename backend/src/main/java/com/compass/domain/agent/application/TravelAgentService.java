@@ -8,10 +8,12 @@ import com.compass.domain.agent.dto.AiPlanResponse;
 import com.compass.domain.agent.dto.ChatResponse;
 import com.compass.domain.user.domain.User;
 import com.compass.global.error.BusinessException;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.converter.BeanOutputConverter;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -20,6 +22,7 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 @Service
+@Slf4j
 public class TravelAgentService {
 
     private final ChatClient generalChatClient;
@@ -27,25 +30,35 @@ public class TravelAgentService {
     private final ToolCallback currentWeatherFunction;
     private final ChatSessionRepository sessionRepository;
     private final ChatMessageRepository messageRepository;
+    private final String generalModelName;
+    private final String planModelName;
 
     public TravelAgentService(
             @Qualifier("generalChatClient") ChatClient generalChatClient,
             @Qualifier("planChatClient") ChatClient planChatClient,
             ToolCallback currentWeatherFunction,
             ChatSessionRepository sessionRepository,
-            ChatMessageRepository messageRepository
+            ChatMessageRepository messageRepository,
+            @Value("${app.ai.model.general:gemini-3.1-flash-lite-preview}") String generalModelName,
+            @Value("${app.ai.model.plan:gemini-3.1-pro}") String planModelName
     ) {
         this.generalChatClient = generalChatClient;
         this.planChatClient = planChatClient;
         this.currentWeatherFunction = currentWeatherFunction;
         this.sessionRepository = sessionRepository;
         this.messageRepository = messageRepository;
+        this.generalModelName = generalModelName;
+        this.planModelName = planModelName;
+
+        log.info("[AI-MODEL] initialized general={}, plan={}", this.generalModelName, this.planModelName);
     }
 
     record IntentClassification(String intent) {}
 
     @Transactional
     public ChatResponse chatWithAgent(User user, Long sessionId, String userMessage) {
+        log.info("[AI-MODEL] chatWithAgent -> general model={}", generalModelName);
+
         if (userMessage == null || userMessage.isBlank()) {
             throw new BusinessException("메시지가 비어 있습니다.", HttpStatus.BAD_REQUEST);
         }
@@ -106,6 +119,8 @@ public class TravelAgentService {
     }
 
     public AiPlanResponse generateTravelPlan(User user, String request, List<ChatMessage> history) {
+        log.info("[AI-MODEL] generateTravelPlan -> plan model={}", planModelName);
+
         BeanOutputConverter<AiPlanResponse> converter = new BeanOutputConverter<>(AiPlanResponse.class);
 
         String historySummary = "";
