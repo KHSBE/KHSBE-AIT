@@ -2,18 +2,15 @@ spring:
   application:
     name: compass-backend
 
-  # ???듭떖 異붽?: ?꾩쭅 Step 4(湲곗뼲 ?μ갑) ?꾩씠誘濡? ?먮윭瑜??좊컻?섎뒗 Vector DB ?먮룞 ?ㅼ젙???좎떆 爰쇰몼?덈떎.
   autoconfigure:
     exclude: org.springframework.ai.vectorstore.pgvector.autoconfigure.PgVectorStoreAutoConfiguration
 
-  # 1. Database (PostgreSQL - pgvector ?대?吏 ?ㅼ젙 諛섏쁺)
   datasource:
     url: jdbc:postgresql://${DB_HOST:127.0.0.1}:${DB_PORT:5433}/${DB_NAME:compass}
     username: ${DB_USERNAME:compass_user}
     password: ${DB_PASSWORD:compass_password}
     driver-class-name: org.postgresql.Driver
 
-  # 2. JPA & Hibernate (?뚯씠釉??먮룞 ?앹꽦 諛?荑쇰━ 濡쒓렇 ?ㅼ젙)
   jpa:
     hibernate:
       ddl-auto: update
@@ -24,7 +21,6 @@ spring:
         default_batch_fetch_size: 100
         dialect: org.hibernate.dialect.PostgreSQLDialect
 
-  # 3. Google OAuth2 (湲곗〈 ?좎?)
   security:
     oauth2:
       client:
@@ -36,45 +32,36 @@ spring:
               - profile
               - email
 
-  # 4. Spring AI ?ㅼ젙 (Google AI Studio - Gemini 3.1 Flash Lite ?곸슜)
   ai:
     google:
       genai:
         api-key: ${GOOGLE_AI_STUDIO_API_KEY}
         chat:
           options:
-            # ?뚯뒪??鍮꾩슜 嫄깆젙 ?녿뒗 理쒖떊 寃쎈웾 紐⑤뜽 ?명똿!
             model: gemini-3.1-flash-lite-preview
             temperature: 0.7
             functions:
               - currentWeatherFunction
-    # 踰≫꽣 ??μ냼(pgvector) ?먮룞 ?ㅼ젙
     vectorstore:
       pgvector:
         table-name: travel_embeddings
-        dimensions: 768 # Gemini ?꾨쿋??紐⑤뜽 湲곗?
+        dimensions: 768
 
-  # 5. Redis (湲곗〈 ?좎?)
   data:
     redis:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
 
-# 6. JWT Secret (湲곗〈 ?좎?)
 jwt:
   secret: ${JWT_SECRET}
 
-# AI ?숈옉 怨쇱젙???먯꽭??蹂닿린 ?꾪븳 ?붾쾭洹?濡쒓렇
 logging:
   level:
     org.springframework.ai: DEBUG
 
-
-# OpenWeatherMap API ?ㅼ젙
 weather:
   api-key: ${WEATHER_API_KEY:default}
 
-# ?꾨줎???곕룞 ?ㅼ젙
 app:
   ai:
     model:
