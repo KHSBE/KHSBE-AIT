@@ -115,15 +115,19 @@ const formatDurationKo = (durationMillis) => {
   return minutes ? `${hours}시간 ${minutes}분` : `${hours}시간`;
 };
 
-const buildRouteLegSummaryKo = (routeLeg) => {
-  if (!routeLeg) return null;
+const buildReferenceTravelSummaryKo = (routeInfo) => {
+  if (!routeInfo) return null;
 
-  const parts = [`다음 이동 · ${getTravelModeLabel(routeLeg.travelMode)}`];
-  if (toFiniteNumber(routeLeg.durationMillis)) {
-    parts.push(formatDurationKo(routeLeg.durationMillis));
+  const parts = [`기준점 → 장소 · ${getTravelModeLabel(routeInfo.travelMode)}`];
+  if (routeInfo.durationText) {
+    parts.push(routeInfo.durationText);
+  } else if (toFiniteNumber(routeInfo.durationMillis)) {
+    parts.push(formatDurationKo(routeInfo.durationMillis));
   }
-  if (toFiniteNumber(routeLeg.distanceMeters)) {
-    parts.push(formatDistanceKo(routeLeg.distanceMeters));
+  if (routeInfo.distanceText) {
+    parts.push(routeInfo.distanceText);
+  } else if (toFiniteNumber(routeInfo.distanceMeters)) {
+    parts.push(formatDistanceKo(routeInfo.distanceMeters));
   }
 
   if (parts.length <= 1) return null;
@@ -133,12 +137,17 @@ const buildRouteLegSummaryKo = (routeLeg) => {
 const isMobileViewport = () =>
   typeof window !== 'undefined' && window.matchMedia('(max-width: 1023px)').matches;
 
+const getReferencePointLabel = (referencePoint) =>
+  referencePoint?.source === 'current' ? '내 위치' : '선택 위치';
+
 const computeRouteSegment = async (RouteClass, originPlace, destinationPlace, travelMode) => {
   const { routes } = await RouteClass.computeRoutes({
     origin: toLatLngLiteral(originPlace),
     destination: toLatLngLiteral(destinationPlace),
     travelMode,
-    fields: ['path', 'distanceMeters', 'durationMillis', 'localizedValues', 'legs']
+    language: 'ko',
+    units: window.google.maps.UnitSystem.METRIC,
+    fields: ['path', 'distanceMeters', 'durationMillis', 'localizedValues']
   });
 
   const route = routes?.[0];
@@ -147,23 +156,36 @@ const computeRouteSegment = async (RouteClass, originPlace, destinationPlace, tr
     .map(toPolylinePoint)
     .filter((point) => Number.isFinite(point.lat) && Number.isFinite(point.lng));
 
-  const firstLeg = route?.legs?.[0];
+  const localizedValues = route?.localizedValues || {};
   const distanceMeters =
     toFiniteNumber(route?.distanceMeters) ??
-    toFiniteNumber(firstLeg?.distanceMeters) ??
     null;
 
   const durationMillis =
     parseDurationLikeToMillis(route?.durationMillis) ??
     parseDurationLikeToMillis(route?.duration) ??
-    parseDurationLikeToMillis(firstLeg?.durationMillis) ??
-    parseDurationLikeToMillis(firstLeg?.duration) ??
     null;
+
+  const distanceText =
+    typeof localizedValues?.distance === 'string' && localizedValues.distance.trim()
+      ? localizedValues.distance.trim()
+      : typeof localizedValues?.distanceMeters === 'string' && localizedValues.distanceMeters.trim()
+        ? localizedValues.distanceMeters.trim()
+        : null;
+
+  const durationText =
+    typeof localizedValues?.duration === 'string' && localizedValues.duration.trim()
+      ? localizedValues.duration.trim()
+      : typeof localizedValues?.staticDuration === 'string' && localizedValues.staticDuration.trim()
+        ? localizedValues.staticDuration.trim()
+        : null;
 
   return {
     path,
     distanceMeters,
-    durationMillis
+    durationMillis,
+    distanceText,
+    durationText
   };
 };
 
@@ -190,7 +212,9 @@ const buildRoutePathFromComputeRoutes = async (RouteClass, places, travelMode) =
       toKey: toPlace.placeKey || null,
       travelMode,
       distanceMeters: segmentResult.distanceMeters,
-      durationMillis: segmentResult.durationMillis
+      durationMillis: segmentResult.durationMillis,
+      distanceText: segmentResult.distanceText,
+      durationText: segmentResult.durationText
     });
   }
 
@@ -291,12 +315,15 @@ export default function PlanDetail() {
   const [detailState, setDetailState] = useState({ loading: false, error: '', data: null });
   const [focusedPlaceKey, setFocusedPlaceKey] = useState(null);
   const [routePath, setRoutePath] = useState([]);
-  const [routeLegByFromKey, setRouteLegByFromKey] = useState({});
   const [isRouteLoading, setIsRouteLoading] = useState(false);
   const [isDirectionsDenied, setIsDirectionsDenied] = useState(false);
   const [selectedTravelMode, setSelectedTravelMode] = useState('DRIVING');
   const [isMapCollapsed, setIsMapCollapsed] = useState(false);
   const [mobileView, setMobileView] = useState('plan');
+  const [currentLocation, setCurrentLocation] = useState(null);
+  const [referencePoint, setReferencePoint] = useState(null);
+  const [selectedPlaceRouteInfo, setSelectedPlaceRouteInfo] = useState(null);
+  const [isSelectedPlaceRouteLoading, setIsSelectedPlaceRouteLoading] = useState(false);
   const placesServiceRef = useRef(null);
 
   const { isLoaded } = useJsApiLoader({
@@ -411,14 +438,12 @@ export default function PlanDetail() {
   useEffect(() => {
     if (!isLoaded || !window.google?.maps || currentDayPlaces.length < 2) {
       setRoutePath(currentDayPlaces.map(toLatLngLiteral));
-      setRouteLegByFromKey({});
       setIsRouteLoading(false);
       return;
     }
 
     if (isDirectionsDenied) {
       setRoutePath(currentDayPlaces.map(toLatLngLiteral));
-      setRouteLegByFromKey({});
       setIsRouteLoading(false);
       return;
     }
@@ -427,7 +452,6 @@ export default function PlanDetail() {
 
     const loadRoutePath = async () => {
       setIsRouteLoading(true);
-      setRouteLegByFromKey({});
       try {
         const routesLibrary = await window.google.maps.importLibrary('routes');
         const RouteClass = routesLibrary?.Route;
@@ -435,18 +459,12 @@ export default function PlanDetail() {
           throw new Error('ROUTES_LIBRARY_UNAVAILABLE');
         }
 
-        const { path, segments } = await buildRoutePathFromComputeRoutes(
+        const { path } = await buildRoutePathFromComputeRoutes(
           RouteClass,
           currentDayPlaces,
           selectedTravelMode
         );
         if (cancelled) return;
-
-        const nextRouteLegByFromKey = {};
-        segments.forEach((segment) => {
-          if (segment.fromKey) nextRouteLegByFromKey[segment.fromKey] = segment;
-        });
-        setRouteLegByFromKey(nextRouteLegByFromKey);
 
         if (path.length > 1) {
           setRoutePath(path);
@@ -473,7 +491,6 @@ export default function PlanDetail() {
 
         if (!cancelled) {
           setRoutePath(currentDayPlaces.map(toLatLngLiteral));
-          setRouteLegByFromKey({});
         }
       } finally {
         if (!cancelled) setIsRouteLoading(false);
@@ -485,14 +502,103 @@ export default function PlanDetail() {
       cancelled = true;
     };
   }, [isLoaded, currentDayPlaces, isDirectionsDenied, selectedTravelMode]);
-  
-  useEffect(() => {
-    setRouteLegByFromKey({});
-  }, [selectedTravelMode, selectedDay]);
 
   const onLoadMap = useCallback((map) => {
     setMapInstance(map);
   }, []);
+
+  const handleMapClick = useCallback((event) => {
+    if (!event?.latLng) return;
+    setReferencePoint({
+      lat: event.latLng.lat(),
+      lng: event.latLng.lng(),
+      source: 'manual'
+    });
+  }, []);
+
+  const requestCurrentLocation = useCallback(() => {
+    if (!navigator.geolocation) {
+      alert('이 브라우저에서는 위치 정보를 지원하지 않습니다.');
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const nextCurrent = {
+          lat: position.coords.latitude,
+          lng: position.coords.longitude
+        };
+        setCurrentLocation(nextCurrent);
+        setReferencePoint({ ...nextCurrent, source: 'current' });
+        if (mapInstance) {
+          mapInstance.panTo(nextCurrent);
+          mapInstance.setZoom(14);
+        }
+      },
+      () => {
+        alert('현재 위치를 가져오지 못했습니다. 위치 권한을 확인해 주세요.');
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  }, [mapInstance]);
+
+  const loadReferenceRouteToPlace = useCallback(
+    async (place) => {
+      if (!referencePoint || !hasValidCoordinates(place) || !isLoaded || !window.google?.maps) {
+        setSelectedPlaceRouteInfo(null);
+        setIsSelectedPlaceRouteLoading(false);
+        return;
+      }
+
+      setIsSelectedPlaceRouteLoading(true);
+      try {
+        const routesLibrary = await window.google.maps.importLibrary('routes');
+        const RouteClass = routesLibrary?.Route;
+        if (!RouteClass) {
+          throw new Error('ROUTES_LIBRARY_UNAVAILABLE');
+        }
+
+        const routeInfo = await computeRouteSegment(
+          RouteClass,
+          { latitude: referencePoint.lat, longitude: referencePoint.lng },
+          place,
+          selectedTravelMode
+        );
+
+        setSelectedPlaceRouteInfo({
+          ...routeInfo,
+          travelMode: selectedTravelMode
+        });
+      } catch (error) {
+        const message = String(error?.message || '');
+        const isPermissionDenied =
+          message.includes('REQUEST_DENIED') ||
+          message.includes('PERMISSION_DENIED') ||
+          message.includes('ROUTES_LIBRARY_UNAVAILABLE') ||
+          message.includes('NotActivatedMapError') ||
+          message.includes('ApiNotActivatedMapError');
+
+        if (isPermissionDenied) {
+          setIsDirectionsDenied(true);
+        } else {
+          console.error('기준점 이동 정보 계산 실패:', error);
+        }
+        setSelectedPlaceRouteInfo(null);
+      } finally {
+        setIsSelectedPlaceRouteLoading(false);
+      }
+    },
+    [referencePoint, selectedTravelMode, isLoaded]
+  );
+
+  useEffect(() => {
+    if (!detailPlace) {
+      setSelectedPlaceRouteInfo(null);
+      setIsSelectedPlaceRouteLoading(false);
+      return;
+    }
+    loadReferenceRouteToPlace(detailPlace);
+  }, [detailPlace, loadReferenceRouteToPlace]);
 
   const updatePlaces = useCallback((dayNumber, updater) => {
     setEditableItineraries((prev) =>
@@ -880,8 +986,6 @@ export default function PlanDetail() {
                     const placeKey = buildPlaceKey(day.dayNumber, idx, place);
                     const focusable = day.dayNumber === selectedDay && hasValidCoordinates(place);
                     const isFocused = focusedPlaceKey === placeKey;
-                    const routeLeg = day.dayNumber === selectedDay ? routeLegByFromKey[placeKey] : null;
-                    const routeSummary = buildRouteLegSummaryKo(routeLeg);
                     return (
                   <div
                     key={placeKey}
@@ -945,12 +1049,6 @@ export default function PlanDetail() {
                         )}
                       </div>
 
-                      {routeSummary && (
-                        <p className="mt-2 rounded-lg border border-[#d9ebfb] bg-[#eef7ff] px-3 py-2 text-xs font-semibold text-[#2b5f87]">
-                          {routeSummary}
-                        </p>
-                      )}
-
                       {place.memo && (
                         <p className="mt-3 flex items-start gap-2 rounded-xl border border-[#d9ebfb] bg-white p-3 text-sm leading-relaxed text-[#4b6177]">
                           <Bot size={16} className="mt-0.5 shrink-0 text-[#1f8ef1]" /> {place.memo}
@@ -1008,6 +1106,24 @@ export default function PlanDetail() {
           ))}
         </div>
 
+        <div className="absolute left-3 top-28 z-10 flex max-w-[85%] gap-1 overflow-x-auto rounded-full border border-[#d3e8fb] bg-white/95 p-1 shadow-md backdrop-blur lg:left-6 lg:top-32">
+          <button
+            onClick={requestCurrentLocation}
+            className="whitespace-nowrap rounded-full border border-[#cde4f8] bg-white px-3 py-1.5 text-xs font-bold text-[#2d587a] hover:border-[#1f8ef1] hover:text-[#1f8ef1]"
+          >
+            내 위치를 기준점으로
+          </button>
+          <button
+            onClick={() => {
+              setReferencePoint(null);
+              setSelectedPlaceRouteInfo(null);
+            }}
+            className="whitespace-nowrap rounded-full border border-[#cde4f8] bg-white px-3 py-1.5 text-xs font-bold text-[#2d587a] hover:border-[#1f8ef1] hover:text-[#1f8ef1]"
+          >
+            기준점 해제
+          </button>
+        </div>
+
         <div className="absolute right-3 top-3 z-10 flex items-center gap-2 lg:right-6 lg:top-6">
           <button
             onClick={fitCurrentDayBounds}
@@ -1032,8 +1148,41 @@ export default function PlanDetail() {
           <GoogleMap
             mapContainerStyle={{ width: '100%', height: '100%' }}
             onLoad={onLoadMap}
+            onClick={handleMapClick}
             options={mapOptions}
           >
+            {currentLocation && (
+              <Marker
+                position={currentLocation}
+                label={{ text: '내', color: 'white', fontWeight: 'bold' }}
+                zIndex={1300}
+                icon={{
+                  path: window.google.maps.SymbolPath.CIRCLE,
+                  fillColor: '#16a34a',
+                  fillOpacity: 1,
+                  strokeColor: '#ffffff',
+                  strokeWeight: 2,
+                  scale: 10
+                }}
+              />
+            )}
+
+            {referencePoint && (
+              <Marker
+                position={{ lat: referencePoint.lat, lng: referencePoint.lng }}
+                label={{ text: '기준', color: 'white', fontWeight: 'bold' }}
+                zIndex={1250}
+                icon={{
+                  path: window.google.maps.SymbolPath.CIRCLE,
+                  fillColor: '#fb923c',
+                  fillOpacity: 1,
+                  strokeColor: '#ffffff',
+                  strokeWeight: 2,
+                  scale: 11
+                }}
+              />
+            )}
+
             {currentDayPlaces.map((place) => {
               const isFocused = focusedPlaceKey === place.placeKey;
               return (
@@ -1079,6 +1228,12 @@ export default function PlanDetail() {
         {isDirectionsDenied && (
           <div className="absolute bottom-3 left-3 z-10 rounded-full border border-[#f3d7b4] bg-[#fff9f2]/95 px-3 py-1.5 text-xs font-bold text-[#9a5a10] shadow-lg backdrop-blur">
             도로 경로 권한 없음: 직선 경로로 표시 중
+          </div>
+        )}
+
+        {referencePoint && (
+          <div className="absolute bottom-14 left-3 z-10 rounded-full border border-[#cde4f8] bg-white/95 px-3 py-1.5 text-xs font-bold text-[#2d587a] shadow-lg backdrop-blur">
+            기준점: {getReferencePointLabel(referencePoint)} (지도 클릭으로 변경)
           </div>
         )}
       </div>
@@ -1217,6 +1372,20 @@ export default function PlanDetail() {
                   )}
                 </div>
 
+                {referencePoint && (
+                  <div className="rounded-xl border border-[#d9ebfb] bg-[#eef7ff] p-3 text-xs font-semibold text-[#2b5f87]">
+                    <p className="mb-1">기준점: {getReferencePointLabel(referencePoint)}</p>
+                    {isSelectedPlaceRouteLoading ? (
+                      <span className="inline-flex items-center gap-1">
+                        <Loader2 size={12} className="animate-spin text-[#1f8ef1]" />
+                        이동 시간 계산 중
+                      </span>
+                    ) : (
+                      buildReferenceTravelSummaryKo(selectedPlaceRouteInfo) || '이 장소까지 이동 정보를 가져오지 못했습니다.'
+                    )}
+                  </div>
+                )}
+
                 <p><span className="font-bold text-[#1f3550]">주소</span>: {detailState.data.address || '정보 없음'}</p>
                 <p>
                   <span className="font-bold text-[#1f3550]">평점</span>:{' '}
@@ -1291,6 +1460,8 @@ export default function PlanDetail() {
                 onClick={() => {
                   setDetailPlace(null);
                   setDetailState({ loading: false, error: '', data: null });
+                  setSelectedPlaceRouteInfo(null);
+                  setIsSelectedPlaceRouteLoading(false);
                 }}
                 className="w-full rounded-xl bg-[#1f8ef1] px-4 py-2 text-sm font-bold text-white sm:w-auto"
               >
