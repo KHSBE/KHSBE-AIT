@@ -741,25 +741,28 @@ export default function PlanDetail() {
       )}
 
       {detailPlace && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4 backdrop-blur-sm">
-          <div className="flex max-h-[88vh] w-full max-w-lg flex-col rounded-3xl border border-[#d5e8fa] bg-white p-5 shadow-2xl">
-            <h3 className="mb-3 text-lg font-black text-[#1f3550]">{detailPlace.placeName}</h3>
+        <div className="fixed inset-0 z-[80] flex items-end justify-center bg-black/45 p-3 pt-20 backdrop-blur-sm sm:items-start sm:px-4 sm:pb-6 sm:pt-20">
+          <div className="flex max-h-[82vh] w-full max-w-xl flex-col rounded-2xl border border-[#d5e8fa] bg-white p-4 shadow-2xl sm:max-h-[calc(100vh-6rem)] sm:rounded-3xl sm:p-5">
+            <div className="mb-3 border-b border-[#e5eff8] pb-3">
+              <h3 className="text-base font-black leading-snug text-[#1f3550] sm:text-lg">{detailPlace.placeName}</h3>
+            </div>
 
-            {detailState.loading && (
-              <div className="flex items-center gap-2 rounded-xl border border-[#dbeaf9] bg-[#f6fbff] p-3 text-sm text-[#4b6177]">
-                <Loader2 size={16} className="animate-spin text-[#1f8ef1]" />
-                장소 상세 정보를 불러오는 중입니다...
-              </div>
-            )}
+            <div className="min-h-0 flex-1 overflow-y-auto pr-1">
+              {detailState.loading && (
+                <div className="flex items-center gap-2 rounded-xl border border-[#dbeaf9] bg-[#f6fbff] p-3 text-sm text-[#4b6177]">
+                  <Loader2 size={16} className="animate-spin text-[#1f8ef1]" />
+                  장소 상세 정보를 불러오는 중입니다...
+                </div>
+              )}
 
-            {!!detailState.error && (
-              <p className="rounded-xl border border-[#f1c7c7] bg-[#fff5f5] p-3 text-sm font-semibold text-[#b54747]">
-                {detailState.error}
-              </p>
-            )}
+              {!!detailState.error && (
+                <p className="rounded-xl border border-[#f1c7c7] bg-[#fff5f5] p-3 text-sm font-semibold text-[#b54747]">
+                  {detailState.error}
+                </p>
+              )}
 
-            {detailState.data && (
-              <div className="space-y-3 overflow-y-auto pr-1 text-sm text-[#3f5f7b]">
+              {detailState.data && (
+                <div className="space-y-3 text-sm text-[#3f5f7b]">
                 <div className="flex flex-wrap gap-2">
                   {detailState.data.isOpenNow === true && (
                     <span className="rounded-full border border-emerald-200 bg-emerald-100 px-3 py-1.5 text-xs font-black text-emerald-700">
@@ -809,7 +812,7 @@ export default function PlanDetail() {
                     <p className="font-bold text-[#1f3550]">리뷰 요약</p>
                     <div className="mt-1 space-y-2">
                       {detailState.data.reviews.map((review, idx) => (
-                        <div key={`${review.author}-${idx}`} className="rounded-xl border border-[#dbeaf9] bg-[#f8fcff] p-3 text-xs">
+                        <div key={`${review.author}-${idx}`} className="rounded-xl border border-[#dbeaf9] bg-[#f8fcff] p-3 text-sm sm:text-xs">
                           <p className="font-bold text-[#2f5f86]">
                             {review.author}
                             {review.rating ? ` · ${review.rating}` : ''}
@@ -843,8 +846,9 @@ export default function PlanDetail() {
                     </a>
                   )}
                 </div>
-              </div>
-            )}
+                </div>
+              )}
+            </div>
 
             <div className="mt-4 flex justify-end border-t border-[#e5eff8] pt-3">
               <button
@@ -852,7 +856,7 @@ export default function PlanDetail() {
                   setDetailPlace(null);
                   setDetailState({ loading: false, error: '', data: null });
                 }}
-                className="rounded-xl bg-[#1f8ef1] px-4 py-2 text-sm font-bold text-white"
+                className="w-full rounded-xl bg-[#1f8ef1] px-4 py-2 text-sm font-bold text-white sm:w-auto"
               >
                 닫기
               </button>
