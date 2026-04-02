@@ -12,76 +12,123 @@ function ProtectedRoute({ children }) {
   const token = localStorage.getItem('accessToken');
 
   if (!token) {
-    alert('로그인이 필요한 서비스입니다! 🔐');
+    alert('로그인이 필요한 서비스입니다.');
     return <Navigate to="/login" replace />;
   }
+
   return children;
 }
 
 function Navigation() {
   const navigate = useNavigate();
-  const token = localStorage.getItem('accessToken');
-  const isLoggedIn = !!token;
+  const isLoggedIn = !!localStorage.getItem('accessToken');
 
   const handleLogout = () => {
     localStorage.removeItem('accessToken');
-    alert('로그아웃 되었습니다. 👋');
+    localStorage.removeItem('refreshToken');
+    alert('로그아웃되었습니다.');
     navigate('/');
   };
 
   return (
-      <nav className="sticky top-0 z-50 border-b border-[#d9cfbf]/70 bg-[#fffdf8]/85 backdrop-blur-xl">
-        <div className="mx-auto flex h-[76px] w-full max-w-7xl items-center justify-between px-4 md:px-8">
-          <Link to="/" className="group flex items-center gap-2">
-            <span className="h-2 w-2 rounded-full bg-[#ff6a3d] shadow-[0_0_0_6px_rgba(255,106,61,0.15)] transition group-hover:scale-110" />
-            <span className="serif-display text-[30px] leading-none tracking-tight text-[#1a212c] md:text-3xl">Compass</span>
+    <nav className="sticky top-0 z-50 border-b border-[#c9e3fb]/90 bg-[#f6fbff]/90 backdrop-blur-xl">
+      <div className="mx-auto flex h-[76px] w-full max-w-7xl items-center justify-between px-4 md:px-8">
+        <Link to="/" className="group flex items-center gap-2">
+          <span className="h-2.5 w-2.5 rounded-full bg-[#1f8ef1] shadow-[0_0_0_6px_rgba(31,142,241,0.2)] transition group-hover:scale-110" />
+          <span className="serif-display text-[30px] leading-none tracking-tight text-[#17263a] md:text-3xl">Compass</span>
+        </Link>
+
+        <div className="flex items-center gap-1 text-sm font-semibold md:gap-2">
+          <Link
+            to="/planner"
+            className="hidden rounded-full px-4 py-2 text-[#4b6177] transition hover:bg-[#e2f1ff] hover:text-[#1f8ef1] sm:inline-flex"
+          >
+            AI 플래너
+          </Link>
+          <Link
+            to="/planner"
+            className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-[#d1e5f8] bg-[#f3f9ff] text-[#4b6177] transition hover:border-[#1f8ef1] hover:text-[#1f8ef1] sm:hidden"
+            aria-label="AI 플래너"
+          >
+            <LayoutDashboard size={17} />
           </Link>
 
-          <div className="flex items-center gap-1 text-sm font-semibold md:gap-2">
-            <Link to="/planner" className="hidden rounded-full px-4 py-2 text-[#586171] transition hover:bg-[#ece5d8] hover:text-[#0f7a80] sm:inline-flex">AI 플래너</Link>
-            <Link to="/planner" className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-[#d7ccbb] bg-[#fff8ed] text-[#5a4d3b] transition hover:border-[#0f7a80] hover:text-[#0f7a80] sm:hidden" aria-label="AI 플래너">
-              <LayoutDashboard size={17} />
+          {isLoggedIn ? (
+            <>
+              <Link
+                to="/mypage"
+                className="hidden rounded-full px-4 py-2 text-[#4b6177] transition hover:bg-[#e2f1ff] hover:text-[#1f8ef1] sm:inline-flex"
+              >
+                내 일정
+              </Link>
+              <Link
+                to="/mypage"
+                className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-[#d1e5f8] bg-[#f3f9ff] text-[#4b6177] transition hover:border-[#1f8ef1] hover:text-[#1f8ef1] sm:hidden"
+                aria-label="내 일정"
+              >
+                <UserRound size={17} />
+              </Link>
+              <button
+                onClick={handleLogout}
+                className="ml-1 inline-flex items-center gap-1 rounded-full border border-[#d1e5f8] bg-[#f3f9ff] px-3 py-2 text-[#3c5874] transition hover:border-[#0ea5e9] hover:text-[#0b78ac] sm:px-4"
+              >
+                <LogOut size={15} />
+                <span className="hidden sm:inline">로그아웃</span>
+              </button>
+            </>
+          ) : (
+            <Link
+              to="/login"
+              className="ml-1 rounded-full bg-[#1f8ef1] px-4 py-2 text-white shadow-[0_10px_22px_rgba(31,142,241,0.28)] transition hover:-translate-y-0.5 hover:bg-[#1878cc] sm:px-5"
+            >
+              로그인
             </Link>
-
-            {isLoggedIn ? (
-              <>
-                <Link to="/mypage" className="hidden rounded-full px-4 py-2 text-[#586171] transition hover:bg-[#ece5d8] hover:text-[#0f7a80] sm:inline-flex">마이페이지</Link>
-                <Link to="/mypage" className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-[#d7ccbb] bg-[#fff8ed] text-[#5a4d3b] transition hover:border-[#0f7a80] hover:text-[#0f7a80] sm:hidden" aria-label="마이페이지">
-                  <UserRound size={17} />
-                </Link>
-                <button onClick={handleLogout} className="ml-1 inline-flex items-center gap-1 rounded-full border border-[#d7ccbb] bg-[#fff8ed] px-3 py-2 text-[#55493a] transition hover:border-[#ff6a3d] hover:text-[#c0502a] sm:px-4">
-                  <LogOut size={15} />
-                  <span className="hidden sm:inline">로그아웃</span>
-                </button>
-              </>
-            ) : (
-              <Link to="/login" className="ml-1 rounded-full bg-[#0f7a80] px-4 py-2 text-white shadow-[0_10px_20px_rgba(15,122,128,0.25)] transition hover:-translate-y-0.5 hover:bg-[#0c686d] sm:px-5">로그인</Link>
-            )}
-          </div>
+          )}
         </div>
-      </nav>
+      </div>
+    </nav>
   );
 }
 
 function App() {
   return (
-      <Router>
-        <div className="page-shell text-[#1a212c]">
-          <Navigation />
-          <main className="relative z-10">
-            <Routes>
-              <Route path="/" element={<Home />} />
-              <Route path="/login" element={<Login />} />
-              <Route path="/signup" element={<Signup />} />
-              <Route path="/oauth2/redirect" element={<OAuth2Redirect />} />
-
-              <Route path="/planner" element={<ProtectedRoute><Planner /></ProtectedRoute>} />
-              <Route path="/mypage" element={<ProtectedRoute><MyPage /></ProtectedRoute>} />
-              <Route path="/plans/:id" element={<ProtectedRoute><PlanDetail /></ProtectedRoute>} />
-            </Routes>
-          </main>
-        </div>
-      </Router>
+    <Router>
+      <div className="page-shell text-[#17263a]">
+        <Navigation />
+        <main className="relative z-10">
+          <Routes>
+            <Route path="/" element={<Home />} />
+            <Route path="/login" element={<Login />} />
+            <Route path="/signup" element={<Signup />} />
+            <Route path="/oauth2/redirect" element={<OAuth2Redirect />} />
+            <Route
+              path="/planner"
+              element={(
+                <ProtectedRoute>
+                  <Planner />
+                </ProtectedRoute>
+              )}
+            />
+            <Route
+              path="/mypage"
+              element={(
+                <ProtectedRoute>
+                  <MyPage />
+                </ProtectedRoute>
+              )}
+            />
+            <Route
+              path="/plans/:id"
+              element={(
+                <ProtectedRoute>
+                  <PlanDetail />
+                </ProtectedRoute>
+              )}
+            />
+          </Routes>
+        </main>
+      </div>
+    </Router>
   );
 }
 

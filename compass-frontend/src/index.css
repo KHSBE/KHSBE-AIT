@@ -2,15 +2,15 @@
 @import "tailwindcss";
 
 :root {
-    --bg-base: #f5f0e6;
-    --surface: #fffdf8;
-    --surface-soft: #f7f1e6;
-    --line: #d8cfbe;
-    --text: #1a212c;
-    --text-muted: #5e6673;
-    --accent: #0f7a80;
-    --accent-soft: #d6f0ee;
-    --accent-strong: #ff6a3d;
+    --bg-base: #edf7ff;
+    --surface: #f8fcff;
+    --surface-soft: #eef7ff;
+    --line: #cfe4f7;
+    --text: #162334;
+    --text-muted: #4b5f74;
+    --accent: #1f8ef1;
+    --accent-soft: #d9edff;
+    --accent-strong: #0ea5e9;
 }
 
 * {
@@ -30,9 +30,9 @@ body {
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     background:
-        radial-gradient(circle at 12% 8%, rgba(255, 106, 61, 0.16), transparent 30%),
-        radial-gradient(circle at 85% 15%, rgba(15, 122, 128, 0.18), transparent 34%),
-        linear-gradient(180deg, #f9f5eb 0%, #f3ecde 100%);
+        radial-gradient(circle at 10% 12%, rgba(14, 165, 233, 0.15), transparent 32%),
+        radial-gradient(circle at 84% 10%, rgba(59, 130, 246, 0.2), transparent 36%),
+        linear-gradient(180deg, #f5fbff 0%, #eaf5ff 100%);
     background-attachment: fixed;
 }
 
@@ -50,9 +50,9 @@ body {
     position: fixed;
     inset: 0;
     pointer-events: none;
-    background-image: radial-gradient(rgba(26, 33, 44, 0.04) 1px, transparent 1px);
-    background-size: 16px 16px;
-    opacity: 0.35;
+    background-image: radial-gradient(rgba(22, 35, 52, 0.035) 1px, transparent 1px);
+    background-size: 18px 18px;
+    opacity: 0.5;
     z-index: 0;
 }
 
@@ -63,10 +63,11 @@ body {
 @keyframes revealUp {
     from {
         opacity: 0;
-        transform: translateY(14px);
+        transform: translateY(12px);
     }
     to {
         opacity: 1;
         transform: translateY(0);
     }
 }
+
