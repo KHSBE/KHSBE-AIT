@@ -5,10 +5,10 @@ import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.google.genai.GoogleGenAiChatOptions;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.ai.tool.function.FunctionToolCallback;
-import org.springframework.context.annotation.Primary;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Primary;
 
 import java.time.LocalDate;
 
@@ -16,8 +16,8 @@ import java.time.LocalDate;
 public class AiConfig {
 
     private static final String DEFAULT_SYSTEM_PROMPT =
-            "당신은 'Compass' 여행 AI 플래너입니다. 오늘은 " + LocalDate.now() + " 입니다. " +
-            "정확하고 실용적인 답변을 우선으로 제공합니다.";
+            "You are Compass travel AI planner. Today is " + LocalDate.now() + ". " +
+            "Prioritize accurate and practical travel guidance.";
 
     @Bean("generalChatClient")
     @Primary
@@ -34,7 +34,7 @@ public class AiConfig {
     @Bean("planChatClient")
     public ChatClient planChatClient(
             ChatClient.Builder builder,
-            @Value("${app.ai.model.plan:gemini-3.1-pro}") String planModel
+            @Value("${app.ai.model.plan:gemini-3.1-pro-preview}") String planModel
     ) {
         return builder.clone()
                 .defaultSystem(DEFAULT_SYSTEM_PROMPT)
@@ -52,7 +52,7 @@ public class AiConfig {
                             String realWeatherInfo = weatherService.getRealWeather(request.location());
                             return new WeatherResponse(request.location(), realWeatherInfo);
                         })
-                .description("특정 지역의 현재 날씨와 온도를 조회합니다. 예: Seoul, Osaka")
+                .description("Get current weather and temperature for a given city, for example: Seoul, Osaka")
                 .inputType(WeatherRequest.class)
                 .build();
     }

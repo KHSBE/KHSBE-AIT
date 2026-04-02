@@ -35,7 +35,10 @@ spring:
   ai:
     google:
       genai:
-        api-key: ${GOOGLE_AI_STUDIO_API_KEY}
+        vertex-ai: ${GOOGLE_GENAI_VERTEX_AI:true}
+        project-id: ${GOOGLE_PROJECT_ID}
+        location: ${GOOGLE_CLOUD_LOCATION:us-central1}
+        credentials-uri: ${GOOGLE_CREDENTIALS_URI}
         chat:
           options:
             model: gemini-3.1-flash-lite-preview
@@ -66,7 +69,7 @@ app:
   ai:
     model:
       general: ${AI_MODEL_GENERAL:gemini-3.1-flash-lite-preview}
-      plan: ${AI_MODEL_PLAN:gemini-3.1-pro}
+      plan: ${AI_MODEL_PLAN:gemini-3.1-pro-preview}
   cors:
     allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173,http://127.0.0.1:5173}
   oauth2:

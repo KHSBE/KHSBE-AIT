@@ -40,7 +40,7 @@ public class TravelAgentService {
             ChatSessionRepository sessionRepository,
             ChatMessageRepository messageRepository,
             @Value("${app.ai.model.general:gemini-3.1-flash-lite-preview}") String generalModelName,
-            @Value("${app.ai.model.plan:gemini-3.1-pro}") String planModelName
+            @Value("${app.ai.model.plan:gemini-3.1-pro-preview}") String planModelName
     ) {
         this.generalChatClient = generalChatClient;
         this.planChatClient = planChatClient;

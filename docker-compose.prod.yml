@@ -21,6 +21,8 @@ services:
     container_name: compass-backend
     env_file:
       - .env
+    volumes:
+      - ./secrets:/app/secrets:ro
     depends_on:
       - postgres
       - redis
