@@ -19,11 +19,7 @@ import { GoogleMap, useJsApiLoader, Marker, Polyline } from '@react-google-maps/
 import { fetchWithAuth, buildApiUrl } from '../utils/api';
 
 const GOOGLE_MAP_LIBRARIES = ['places'];
-const ROUTE_TRAVEL_MODES = [
-  { value: 'DRIVING', label: '자동차' },
-  { value: 'WALKING', label: '도보' },
-  { value: 'TRANSIT', label: '대중교통' }
-];
+const DEFAULT_ROUTE_TRAVEL_MODE = 'DRIVING';
 
 const MAP_SIMPLIFIED_STYLES = [
   { featureType: 'poi.business', stylers: [{ visibility: 'off' }] },
@@ -57,23 +53,6 @@ const toPolylinePoint = (point) => ({
   lat: typeof point?.lat === 'function' ? point.lat() : Number(point?.lat),
   lng: typeof point?.lng === 'function' ? point.lng() : Number(point?.lng)
 });
-
-const getTravelModeLabel = (travelMode) => {
-  switch (travelMode) {
-    case 'WALK':
-    case 'WALKING':
-      return '도보';
-    case 'TRANSIT':
-      return '대중교통';
-    case 'BICYCLE':
-    case 'TWO_WHEELER':
-      return '이륜차';
-    case 'DRIVE':
-    case 'DRIVING':
-    default:
-      return '자동차';
-  }
-};
 
 const isMobileViewport = () =>
   typeof window !== 'undefined' && window.matchMedia('(max-width: 1023px)').matches;
@@ -211,7 +190,6 @@ export default function PlanDetail() {
   const [routePath, setRoutePath] = useState([]);
   const [isRouteLoading, setIsRouteLoading] = useState(false);
   const [isDirectionsDenied, setIsDirectionsDenied] = useState(false);
-  const [selectedTravelMode, setSelectedTravelMode] = useState('DRIVING');
   const [isMapCollapsed, setIsMapCollapsed] = useState(false);
   const [mobileView, setMobileView] = useState('plan');
   const placesServiceRef = useRef(null);
@@ -352,7 +330,7 @@ export default function PlanDetail() {
         const { path } = await buildRoutePathFromComputeRoutes(
           RouteClass,
           currentDayPlaces,
-          selectedTravelMode
+          DEFAULT_ROUTE_TRAVEL_MODE
         );
         if (cancelled) return;
 
@@ -390,7 +368,7 @@ export default function PlanDetail() {
     return () => {
       cancelled = true;
     };
-  }, [isLoaded, currentDayPlaces, isDirectionsDenied, selectedTravelMode]);
+  }, [isLoaded, currentDayPlaces, isDirectionsDenied]);
 
   const onLoadMap = useCallback((map) => {
     setMapInstance(map);
@@ -886,22 +864,6 @@ export default function PlanDetail() {
           ))}
         </div>
 
-        <div className="absolute left-3 top-16 z-10 flex max-w-[85%] gap-1 overflow-x-auto rounded-full border border-[#d3e8fb] bg-white/95 p-1 shadow-md backdrop-blur lg:left-6 lg:top-20 lg:max-w-[70%]">
-          {ROUTE_TRAVEL_MODES.map((mode) => (
-            <button
-              key={mode.value}
-              onClick={() => setSelectedTravelMode(mode.value)}
-              className={`whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-bold transition ${
-                selectedTravelMode === mode.value
-                  ? 'bg-[#1f8ef1] text-white shadow'
-                  : 'text-[#2d587a] hover:bg-[#eaf6ff]'
-              }`}
-            >
-              {mode.label}
-            </button>
-          ))}
-        </div>
-
         <div className="absolute right-3 top-3 z-10 flex items-center gap-2 lg:right-6 lg:top-6">
           <button
             onClick={fitCurrentDayBounds}
@@ -966,7 +928,7 @@ export default function PlanDetail() {
         {isRouteLoading && (
           <div className="absolute bottom-3 left-3 z-10 flex items-center gap-2 rounded-full border border-[#cde4f8] bg-white/95 px-3 py-1.5 text-xs font-bold text-[#2d587a] shadow-lg backdrop-blur">
             <Loader2 size={12} className="animate-spin text-[#1f8ef1]" />
-            {getTravelModeLabel(selectedTravelMode)} 경로 계산 중
+            경로 계산 중
           </div>
         )}
 
