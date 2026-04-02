@@ -2,8 +2,10 @@ package com.compass.global.config;
 
 import com.compass.domain.agent.application.WeatherService;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.google.genai.GoogleGenAiChatOptions;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.ai.tool.function.FunctionToolCallback;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -12,30 +14,43 @@ import java.time.LocalDate;
 @Configuration
 public class AiConfig {
 
-    // 1. 기본 AI 자아 설정
-    @Bean
-    public ChatClient chatClient(ChatClient.Builder builder) {
-        return builder
-                .defaultSystem("당신은 'Compass'의 수석 AI 여행 플래너입니다. " +
-                        "오늘은 " + LocalDate.now() + " 입니다. " +
-                        "항상 친절하고 유쾌한 전문가의 톤으로 답변하세요.")
+    private static final String DEFAULT_SYSTEM_PROMPT =
+            "당신은 'Compass' 여행 AI 플래너입니다. 오늘은 " + LocalDate.now() + " 입니다. " +
+            "정확하고 실용적인 답변을 우선으로 제공합니다.";
+
+    @Bean("generalChatClient")
+    public ChatClient generalChatClient(
+            ChatClient.Builder builder,
+            @Value("${app.ai.model.general:gemini-3.1-flash-lite-preview}") String generalModel
+    ) {
+        return builder.clone()
+                .defaultSystem(DEFAULT_SYSTEM_PROMPT)
+                .defaultOptions(GoogleGenAiChatOptions.builder().model(generalModel).build())
                 .build();
     }
 
-    // 2. 데이터 주고받을 DTO
+    @Bean("planChatClient")
+    public ChatClient planChatClient(
+            ChatClient.Builder builder,
+            @Value("${app.ai.model.plan:gemini-3.1-pro}") String planModel
+    ) {
+        return builder.clone()
+                .defaultSystem(DEFAULT_SYSTEM_PROMPT)
+                .defaultOptions(GoogleGenAiChatOptions.builder().model(planModel).build())
+                .build();
+    }
+
     public record WeatherRequest(String location) {}
     public record WeatherResponse(String location, String weatherInfo) {}
 
-    // ★ 3. 핵심 해결책: 최신 버전(1.1.0-M2)의 ToolCallback 방식으로 도구를 직접 생성하여 Bean으로 등록합니다!
     @Bean
     public ToolCallback currentWeatherFunction(WeatherService weatherService) {
         return FunctionToolCallback.builder("currentWeatherFunction",
                         (WeatherRequest request) -> {
-                            System.out.println("💡 [AI 도구 사용] 검색 지역: " + request.location());
                             String realWeatherInfo = weatherService.getRealWeather(request.location());
                             return new WeatherResponse(request.location(), realWeatherInfo);
                         })
-                .description("특정 지역의 현재 날씨와 온도를 가져옵니다. 반드시 'Seoul', 'Osaka'와 같이 영문 도시명으로 검색하세요.")
+                .description("특정 지역의 현재 날씨와 온도를 조회합니다. 예: Seoul, Osaka")
                 .inputType(WeatherRequest.class)
                 .build();
     }
