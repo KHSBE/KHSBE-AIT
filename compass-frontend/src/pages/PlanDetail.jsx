@@ -58,6 +58,22 @@ const toFiniteNumber = (value) => {
   return Number.isFinite(parsed) ? parsed : null;
 };
 
+const parseDurationLikeToMillis = (value) => {
+  if (value === null || value === undefined) return null;
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  if (typeof value === 'string') {
+    // e.g. "123s" (protobuf duration)
+    const secondsMatch = value.match(/^(-?\d+(?:\.\d+)?)s$/);
+    if (secondsMatch) {
+      const seconds = Number(secondsMatch[1]);
+      return Number.isFinite(seconds) ? Math.round(seconds * 1000) : null;
+    }
+    const asNumber = Number(value);
+    return Number.isFinite(asNumber) ? asNumber : null;
+  }
+  return null;
+};
+
 const toPolylinePoint = (point) => ({
   lat: typeof point?.lat === 'function' ? point.lat() : Number(point?.lat),
   lng: typeof point?.lng === 'function' ? point.lng() : Number(point?.lng)
@@ -99,6 +115,21 @@ const formatDurationKo = (durationMillis) => {
   return minutes ? `${hours}시간 ${minutes}분` : `${hours}시간`;
 };
 
+const buildRouteLegSummaryKo = (routeLeg) => {
+  if (!routeLeg) return null;
+
+  const parts = [`다음 이동 · ${getTravelModeLabel(routeLeg.travelMode)}`];
+  if (toFiniteNumber(routeLeg.durationMillis)) {
+    parts.push(formatDurationKo(routeLeg.durationMillis));
+  }
+  if (toFiniteNumber(routeLeg.distanceMeters)) {
+    parts.push(formatDistanceKo(routeLeg.distanceMeters));
+  }
+
+  if (parts.length <= 1) return null;
+  return parts.join(' · ');
+};
+
 const isMobileViewport = () =>
   typeof window !== 'undefined' && window.matchMedia('(max-width: 1023px)').matches;
 
@@ -107,7 +138,7 @@ const computeRouteSegment = async (RouteClass, originPlace, destinationPlace, tr
     origin: toLatLngLiteral(originPlace),
     destination: toLatLngLiteral(destinationPlace),
     travelMode,
-    fields: ['path', 'distanceMeters', 'durationMillis']
+    fields: ['path', 'distanceMeters', 'durationMillis', 'localizedValues', 'legs']
   });
 
   const route = routes?.[0];
@@ -116,10 +147,23 @@ const computeRouteSegment = async (RouteClass, originPlace, destinationPlace, tr
     .map(toPolylinePoint)
     .filter((point) => Number.isFinite(point.lat) && Number.isFinite(point.lng));
 
+  const firstLeg = route?.legs?.[0];
+  const distanceMeters =
+    toFiniteNumber(route?.distanceMeters) ??
+    toFiniteNumber(firstLeg?.distanceMeters) ??
+    null;
+
+  const durationMillis =
+    parseDurationLikeToMillis(route?.durationMillis) ??
+    parseDurationLikeToMillis(route?.duration) ??
+    parseDurationLikeToMillis(firstLeg?.durationMillis) ??
+    parseDurationLikeToMillis(firstLeg?.duration) ??
+    null;
+
   return {
     path,
-    distanceMeters: toFiniteNumber(route?.distanceMeters),
-    durationMillis: toFiniteNumber(route?.durationMillis)
+    distanceMeters,
+    durationMillis
   };
 };
 
@@ -362,10 +406,6 @@ export default function PlanDetail() {
 
   useEffect(() => {
     setFocusedPlaceKey(null);
-  }, [selectedDay]);
-
-  useEffect(() => {
-    setMobileView('plan');
   }, [selectedDay]);
 
   useEffect(() => {
@@ -841,6 +881,7 @@ export default function PlanDetail() {
                     const focusable = day.dayNumber === selectedDay && hasValidCoordinates(place);
                     const isFocused = focusedPlaceKey === placeKey;
                     const routeLeg = day.dayNumber === selectedDay ? routeLegByFromKey[placeKey] : null;
+                    const routeSummary = buildRouteLegSummaryKo(routeLeg);
                     return (
                   <div
                     key={placeKey}
@@ -904,9 +945,9 @@ export default function PlanDetail() {
                         )}
                       </div>
 
-                      {routeLeg && (
+                      {routeSummary && (
                         <p className="mt-2 rounded-lg border border-[#d9ebfb] bg-[#eef7ff] px-3 py-2 text-xs font-semibold text-[#2b5f87]">
-                          다음 이동 · {getTravelModeLabel(routeLeg.travelMode)} {formatDurationKo(routeLeg.durationMillis)} · {formatDistanceKo(routeLeg.distanceMeters)}
+                          {routeSummary}
                         </p>
                       )}
 
