@@ -178,6 +178,7 @@ export default function PlanDetail() {
   const [focusedPlaceKey, setFocusedPlaceKey] = useState(null);
   const [routePath, setRoutePath] = useState([]);
   const [isRouteLoading, setIsRouteLoading] = useState(false);
+  const [isDirectionsDenied, setIsDirectionsDenied] = useState(false);
   const [isMapCollapsed, setIsMapCollapsed] = useState(false);
   const placesServiceRef = useRef(null);
 
@@ -292,7 +293,13 @@ export default function PlanDetail() {
 
   useEffect(() => {
     if (!isLoaded || !window.google?.maps || currentDayPlaces.length < 2) {
-      setRoutePath([]);
+      setRoutePath(currentDayPlaces.map(toLatLngLiteral));
+      setIsRouteLoading(false);
+      return;
+    }
+
+    if (isDirectionsDenied) {
+      setRoutePath(currentDayPlaces.map(toLatLngLiteral));
       setIsRouteLoading(false);
       return;
     }
@@ -311,7 +318,20 @@ export default function PlanDetail() {
           setRoutePath(currentDayPlaces.map(toLatLngLiteral));
         }
       } catch (error) {
-        console.error('Directions 경로 계산 실패:', error);
+        const message = String(error?.message || '');
+        const isPermissionDenied =
+          message.includes('REQUEST_DENIED') ||
+          message.includes('NotActivatedMapError') ||
+          message.includes('legacy API') ||
+          message.includes('DirectionsService');
+
+        if (isPermissionDenied) {
+          console.warn('Directions 권한 없음. 직선 경로 모드로 전환합니다.');
+          setIsDirectionsDenied(true);
+        } else {
+          console.error('Directions 경로 계산 실패:', error);
+        }
+
         if (!cancelled) {
           setRoutePath(currentDayPlaces.map(toLatLngLiteral));
         }
@@ -324,7 +344,7 @@ export default function PlanDetail() {
     return () => {
       cancelled = true;
     };
-  }, [isLoaded, currentDayPlaces]);
+  }, [isLoaded, currentDayPlaces, isDirectionsDenied]);
 
   const onLoadMap = useCallback((map) => {
     setMapInstance(map);
@@ -856,6 +876,12 @@ export default function PlanDetail() {
           <div className="absolute bottom-3 left-3 z-10 flex items-center gap-2 rounded-full border border-[#cde4f8] bg-white/95 px-3 py-1.5 text-xs font-bold text-[#2d587a] shadow-lg backdrop-blur">
             <Loader2 size={12} className="animate-spin text-[#1f8ef1]" />
             이동 경로 계산 중
+          </div>
+        )}
+
+        {isDirectionsDenied && (
+          <div className="absolute bottom-3 left-3 z-10 rounded-full border border-[#f3d7b4] bg-[#fff9f2]/95 px-3 py-1.5 text-xs font-bold text-[#9a5a10] shadow-lg backdrop-blur">
+            도로 경로 권한 없음: 직선 경로로 표시 중
           </div>
         )}
       </div>
