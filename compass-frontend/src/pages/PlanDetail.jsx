@@ -20,11 +20,71 @@ import { fetchWithAuth, buildApiUrl } from '../utils/api';
 
 const GOOGLE_MAP_LIBRARIES = ['places'];
 
+const MAP_SIMPLIFIED_STYLES = [
+  { featureType: 'poi.business', stylers: [{ visibility: 'off' }] },
+  { featureType: 'poi.attraction', stylers: [{ visibility: 'off' }] },
+  { featureType: 'transit', stylers: [{ visibility: 'off' }] },
+  { featureType: 'road', elementType: 'labels.icon', stylers: [{ visibility: 'off' }] },
+  { featureType: 'administrative.neighborhood', stylers: [{ visibility: 'off' }] }
+];
+
 const cloneItineraries = (itineraries = []) =>
   itineraries.map((day) => ({
     ...day,
     places: (day.places || []).map((place) => ({ ...place }))
   }));
+
+const hasValidCoordinates = (place) => {
+  const lat = Number(place.latitude);
+  const lng = Number(place.longitude);
+  return Number.isFinite(lat) && Number.isFinite(lng) && (lat !== 0 || lng !== 0);
+};
+
+const buildPlaceKey = (dayNumber, index, place) =>
+  `${dayNumber}-${place.id ?? place.googlePlaceId ?? place.placeName ?? 'place'}-${index}`;
+
+const toLatLngLiteral = (place) => ({
+  lat: Number(place.latitude),
+  lng: Number(place.longitude)
+});
+
+const getDirectionsSegmentPath = (service, origin, destination) =>
+  new Promise((resolve, reject) => {
+    service.route(
+      {
+        origin,
+        destination,
+        travelMode: window.google.maps.TravelMode.DRIVING
+      },
+      (result, status) => {
+        if (status === window.google.maps.DirectionsStatus.OK && result?.routes?.length) {
+          const path = result.routes[0].overview_path.map((point) => ({
+            lat: point.lat(),
+            lng: point.lng()
+          }));
+          resolve(path);
+          return;
+        }
+        reject(new Error(`Directions 실패: ${status}`));
+      }
+    );
+  });
+
+const buildDirectionsPath = async (service, places) => {
+  const mergedPath = [];
+
+  for (let i = 0; i < places.length - 1; i += 1) {
+    const origin = toLatLngLiteral(places[i]);
+    const destination = toLatLngLiteral(places[i + 1]);
+    const segment = await getDirectionsSegmentPath(service, origin, destination);
+    if (!segment.length) continue;
+
+    if (mergedPath.length > 0) segment.shift();
+    mergedPath.push(...segment);
+  }
+
+  return mergedPath;
+};
 
 const toNumberOrZero = (value) => {
   if (value === '' || value === null || value === undefined) return 0;
@@ -115,6 +175,10 @@ export default function PlanDetail() {
   const [replaceSearchError, setReplaceSearchError] = useState('');
   const [detailPlace, setDetailPlace] = useState(null);
   const [detailState, setDetailState] = useState({ loading: false, error: '', data: null });
+  const [focusedPlaceKey, setFocusedPlaceKey] = useState(null);
+  const [routePath, setRoutePath] = useState([]);
+  const [isRouteLoading, setIsRouteLoading] = useState(false);
+  const [isMapCollapsed, setIsMapCollapsed] = useState(false);
   const placesServiceRef = useRef(null);
 
   const { isLoaded } = useJsApiLoader({
@@ -171,18 +235,96 @@ export default function PlanDetail() {
   const currentDayPlaces = useMemo(() => {
     if (!displayItineraries.length) return [];
     const dayData = displayItineraries.find((item) => item.dayNumber === selectedDay);
-    return (dayData?.places || []).filter(
-      (place) => place.latitude && place.longitude && place.latitude !== 0.0 && place.longitude !== 0.0
-    );
+    const placesWithIndex = (dayData?.places || []).map((place, index) => ({
+      ...place,
+      sourceIndex: index,
+      placeKey: buildPlaceKey(selectedDay, index, place)
+    }));
+
+    const withCoordinates = placesWithIndex.filter(hasValidCoordinates);
+    return withCoordinates.map((place, mapIndex) => ({
+      ...place,
+      latitude: Number(place.latitude),
+      longitude: Number(place.longitude),
+      markerOrder: mapIndex + 1
+    }));
   }, [displayItineraries, selectedDay]);
 
-  useEffect(() => {
+  const mapOptions = useMemo(
+    () => ({
+      disableDefaultUI: true,
+      zoomControl: true,
+      styles: MAP_SIMPLIFIED_STYLES
+    }),
+    []
+  );
+
+  const fitCurrentDayBounds = useCallback(() => {
     if (!mapInstance || !window.google || currentDayPlaces.length === 0) return;
 
+    if (currentDayPlaces.length === 1) {
+      mapInstance.panTo(toLatLngLiteral(currentDayPlaces[0]));
+      mapInstance.setZoom(15);
+      return;
+    }
+
     const bounds = new window.google.maps.LatLngBounds();
-    currentDayPlaces.forEach((place) => bounds.extend({ lat: place.latitude, lng: place.longitude }));
+    currentDayPlaces.forEach((place) => bounds.extend(toLatLngLiteral(place)));
     mapInstance.fitBounds(bounds);
   }, [mapInstance, currentDayPlaces]);
+
+  useEffect(() => {
+    if (isMapCollapsed) return;
+    fitCurrentDayBounds();
+  }, [fitCurrentDayBounds, isMapCollapsed]);
+
+  useEffect(() => {
+    if (!mapInstance || !focusedPlaceKey) return;
+    const target = currentDayPlaces.find((place) => place.placeKey === focusedPlaceKey);
+    if (!target) return;
+
+    mapInstance.panTo({ lat: target.latitude, lng: target.longitude });
+  }, [mapInstance, currentDayPlaces, focusedPlaceKey]);
+
+  useEffect(() => {
+    setFocusedPlaceKey(null);
+  }, [selectedDay]);
+
+  useEffect(() => {
+    if (!isLoaded || !window.google?.maps || currentDayPlaces.length < 2) {
+      setRoutePath([]);
+      setIsRouteLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadRoutePath = async () => {
+      setIsRouteLoading(true);
+      try {
+        const directionsService = new window.google.maps.DirectionsService();
+        const path = await buildDirectionsPath(directionsService, currentDayPlaces);
+        if (cancelled) return;
+        if (path.length > 1) {
+          setRoutePath(path);
+        } else {
+          setRoutePath(currentDayPlaces.map(toLatLngLiteral));
+        }
+      } catch (error) {
+        console.error('Directions 경로 계산 실패:', error);
+        if (!cancelled) {
+          setRoutePath(currentDayPlaces.map(toLatLngLiteral));
+        }
+      } finally {
+        if (!cancelled) setIsRouteLoading(false);
+      }
+    };
+
+    loadRoutePath();
+    return () => {
+      cancelled = true;
+    };
+  }, [isLoaded, currentDayPlaces]);
 
   const onLoadMap = useCallback((map) => {
     setMapInstance(map);
@@ -461,7 +603,11 @@ export default function PlanDetail() {
 
   return (
     <div className="flex min-h-[calc(100vh-76px)] flex-col bg-[#eef7ff] lg:h-[calc(100vh-76px)] lg:flex-row lg:overflow-hidden">
-      <div className="h-auto w-full overflow-visible border-r-0 border-[#d6e9fa] bg-[#f9fdff] lg:h-full lg:w-5/12 lg:overflow-y-auto lg:border-r">
+      <div
+        className={`h-auto w-full overflow-visible border-r-0 border-[#d6e9fa] bg-[#f9fdff] lg:h-full lg:overflow-y-auto lg:border-r ${
+          isMapCollapsed ? 'lg:w-full' : 'lg:w-5/12'
+        }`}
+      >
         <div className="sticky top-0 z-10 border-b border-[#d6e9fa] bg-[#f9fdff]/95 p-4 shadow-sm backdrop-blur-md sm:p-6">
           <div className="mb-4 flex items-start justify-between gap-3">
             <Link
@@ -471,32 +617,41 @@ export default function PlanDetail() {
               <ChevronLeft size={16} /> 목록으로 돌아가기
             </Link>
 
-            {!isEditMode ? (
+            <div className="flex items-center gap-2">
+              {!isEditMode ? (
+                <button
+                  onClick={startEditMode}
+                  className="inline-flex items-center gap-2 rounded-full border border-[#cde4f8] bg-white px-4 py-2 text-sm font-bold text-[#2d587a] transition hover:border-[#1f8ef1] hover:text-[#1f8ef1]"
+                >
+                  <PencilLine size={16} /> 일정 편집
+                </button>
+              ) : (
+                <>
+                  <button
+                    onClick={cancelEditMode}
+                    disabled={isSaving}
+                    className="inline-flex items-center gap-1 rounded-full border border-[#d4e7f9] bg-white px-3 py-2 text-xs font-bold text-[#4b6177] transition hover:bg-[#f5fafe] disabled:opacity-50"
+                  >
+                    <X size={14} /> 취소
+                  </button>
+                  <button
+                    onClick={saveEdits}
+                    disabled={isSaving}
+                    className="inline-flex items-center gap-1 rounded-full bg-[#1f8ef1] px-3 py-2 text-xs font-bold text-white shadow-sm transition hover:bg-[#1878cc] disabled:opacity-60"
+                  >
+                    {isSaving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+                    저장
+                  </button>
+                </>
+              )}
+
               <button
-                onClick={startEditMode}
-                className="inline-flex items-center gap-2 rounded-full border border-[#cde4f8] bg-white px-4 py-2 text-sm font-bold text-[#2d587a] transition hover:border-[#1f8ef1] hover:text-[#1f8ef1]"
+                onClick={() => setIsMapCollapsed((prev) => !prev)}
+                className="hidden rounded-full border border-[#cde4f8] bg-white px-3 py-2 text-xs font-bold text-[#2d587a] transition hover:border-[#1f8ef1] hover:text-[#1f8ef1] lg:inline-flex"
               >
-                <PencilLine size={16} /> 일정 편집
+                {isMapCollapsed ? '지도 펼치기' : '지도 숨기기'}
               </button>
-            ) : (
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={cancelEditMode}
-                  disabled={isSaving}
-                  className="inline-flex items-center gap-1 rounded-full border border-[#d4e7f9] bg-white px-3 py-2 text-xs font-bold text-[#4b6177] transition hover:bg-[#f5fafe] disabled:opacity-50"
-                >
-                  <X size={14} /> 취소
-                </button>
-                <button
-                  onClick={saveEdits}
-                  disabled={isSaving}
-                  className="inline-flex items-center gap-1 rounded-full bg-[#1f8ef1] px-3 py-2 text-xs font-bold text-white shadow-sm transition hover:bg-[#1878cc] disabled:opacity-60"
-                >
-                  {isSaving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
-                  저장
-                </button>
-              </div>
-            )}
+            </div>
           </div>
 
           <h1 className="mb-3 text-xl font-black leading-tight text-[#1f3550] sm:text-2xl">{plan.title}</h1>
@@ -532,8 +687,13 @@ export default function PlanDetail() {
 
               <div className="ml-4 mt-2 space-y-4 border-l-2 border-[#b9dcfa] pl-4">
                 {(day.places || []).map((place, idx) => (
+                  (() => {
+                    const placeKey = buildPlaceKey(day.dayNumber, idx, place);
+                    const focusable = day.dayNumber === selectedDay && hasValidCoordinates(place);
+                    const isFocused = focusedPlaceKey === placeKey;
+                    return (
                   <div
-                    key={place.id || `${day.dayNumber}-${idx}`}
+                    key={placeKey}
                     className="relative pl-6"
                     draggable={isEditMode}
                     onDragStart={() => handleDragStart(day.dayNumber, idx)}
@@ -546,9 +706,16 @@ export default function PlanDetail() {
                       className={`group rounded-2xl border bg-[#f9fdff] p-4 transition ${
                         isEditMode
                           ? 'cursor-grab border-[#b9dbf8] hover:border-[#1f8ef1] hover:shadow-md'
-                          : 'cursor-pointer border-[#d6e9fa] hover:border-[#1f8ef1] hover:shadow-md'
+                          : isFocused
+                            ? 'cursor-pointer border-[#1f8ef1] ring-2 ring-[#8ec9f8] shadow-md'
+                            : 'cursor-pointer border-[#d6e9fa] hover:border-[#1f8ef1] hover:shadow-md'
                       }`}
-                      onClick={() => openPlaceDetail(place)}
+                      onMouseEnter={() => focusable && setFocusedPlaceKey(placeKey)}
+                      onMouseLeave={() => focusable && setFocusedPlaceKey((prev) => (prev === placeKey ? null : prev))}
+                      onClick={() => {
+                        if (focusable) setFocusedPlaceKey(placeKey);
+                        openPlaceDetail(place);
+                      }}
                     >
                       <div className="flex items-start justify-between gap-3">
                         <h3 className="flex items-center gap-2 text-lg font-bold text-[#1f3550] transition group-hover:text-[#1f8ef1]">
@@ -590,6 +757,8 @@ export default function PlanDetail() {
                       )}
                     </div>
                   </div>
+                    );
+                  })()
                 ))}
 
                 {isEditMode && (day.places || []).length === 0 && (
@@ -603,7 +772,11 @@ export default function PlanDetail() {
         </div>
       </div>
 
-      <div className="relative h-[44vh] w-full border-t border-[#d6e9fa] bg-[#dceefe] lg:h-full lg:w-7/12 lg:border-t-0">
+      <div
+        className={`relative h-[44vh] w-full border-t border-[#d6e9fa] bg-[#dceefe] lg:h-full lg:border-t-0 ${
+          isMapCollapsed ? 'lg:hidden' : 'lg:w-7/12'
+        }`}
+      >
         <div className="absolute left-1/2 top-3 z-10 flex max-w-[94%] -translate-x-1/2 gap-1 overflow-x-auto rounded-full border border-[#d3e8fb] bg-[#f9fdff]/92 p-1.5 shadow-lg backdrop-blur-md lg:top-6 lg:max-w-[90%]">
           {displayItineraries.map((day) => (
             <button
@@ -618,6 +791,21 @@ export default function PlanDetail() {
           ))}
         </div>
 
+        <div className="absolute right-3 top-3 z-10 flex items-center gap-2 lg:right-6 lg:top-6">
+          <button
+            onClick={fitCurrentDayBounds}
+            className="rounded-full border border-[#cde4f8] bg-white/95 px-3 py-2 text-xs font-bold text-[#2d587a] shadow-md backdrop-blur hover:border-[#1f8ef1] hover:text-[#1f8ef1]"
+          >
+            전체보기
+          </button>
+          <button
+            onClick={() => setIsMapCollapsed(true)}
+            className="hidden rounded-full border border-[#cde4f8] bg-white/95 px-3 py-2 text-xs font-bold text-[#2d587a] shadow-md backdrop-blur hover:border-[#1f8ef1] hover:text-[#1f8ef1] lg:inline-flex"
+          >
+            지도 닫기
+          </button>
+        </div>
+
         {!isLoaded ? (
           <div className="flex h-full flex-col items-center justify-center text-[#4b6177]">
             <Loader2 className="mb-4 animate-spin" size={40} />
@@ -627,23 +815,48 @@ export default function PlanDetail() {
           <GoogleMap
             mapContainerStyle={{ width: '100%', height: '100%' }}
             onLoad={onLoadMap}
-            options={{ disableDefaultUI: true, zoomControl: true }}
+            options={mapOptions}
           >
-            {currentDayPlaces.map((place, index) => (
+            {currentDayPlaces.map((place) => {
+              const isFocused = focusedPlaceKey === place.placeKey;
+              return (
               <Marker
-                key={index}
+                key={place.placeKey}
                 position={{ lat: place.latitude, lng: place.longitude }}
-                label={{ text: String(index + 1), color: 'white', fontWeight: 'bold' }}
+                label={{ text: String(place.markerOrder), color: 'white', fontWeight: 'bold' }}
+                zIndex={isFocused ? 1000 : 1}
+                icon={{
+                  path: window.google.maps.SymbolPath.CIRCLE,
+                  fillColor: isFocused ? '#ff7a45' : '#1f8ef1',
+                  fillOpacity: 1,
+                  strokeColor: '#ffffff',
+                  strokeWeight: 2,
+                  scale: isFocused ? 13 : 11
+                }}
+                onMouseOver={() => setFocusedPlaceKey(place.placeKey)}
+                onMouseOut={() => setFocusedPlaceKey((prev) => (prev === place.placeKey ? null : prev))}
+                onClick={() => {
+                  setFocusedPlaceKey(place.placeKey);
+                  openPlaceDetail(place);
+                }}
               />
-            ))}
+              );
+            })}
 
             {currentDayPlaces.length > 1 && (
               <Polyline
-                path={currentDayPlaces.map((place) => ({ lat: place.latitude, lng: place.longitude }))}
-                options={{ strokeColor: '#1f8ef1', strokeOpacity: 0.82, strokeWeight: 4 }}
+                path={routePath.length > 1 ? routePath : currentDayPlaces.map(toLatLngLiteral)}
+                options={{ strokeColor: '#1f8ef1', strokeOpacity: 0.92, strokeWeight: 5 }}
               />
             )}
           </GoogleMap>
+        )}
+
+        {isRouteLoading && (
+          <div className="absolute bottom-3 left-3 z-10 flex items-center gap-2 rounded-full border border-[#cde4f8] bg-white/95 px-3 py-1.5 text-xs font-bold text-[#2d587a] shadow-lg backdrop-blur">
+            <Loader2 size={12} className="animate-spin text-[#1f8ef1]" />
+            이동 경로 계산 중
+          </div>
         )}
       </div>
 
