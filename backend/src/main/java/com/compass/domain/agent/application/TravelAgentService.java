@@ -10,7 +10,9 @@ import com.compass.domain.user.domain.User;
 import com.compass.global.error.BusinessException;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.converter.BeanOutputConverter;
+import org.springframework.ai.google.genai.GoogleGenAiChatOptions;
 import org.springframework.ai.tool.ToolCallback;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,17 +27,23 @@ public class TravelAgentService {
     private final ToolCallback currentWeatherFunction;
     private final ChatSessionRepository sessionRepository;
     private final ChatMessageRepository messageRepository;
+    private final GoogleGenAiChatOptions generalChatOptions;
+    private final GoogleGenAiChatOptions planGenerationOptions;
 
     public TravelAgentService(
             ChatClient chatClient,
             ToolCallback currentWeatherFunction,
             ChatSessionRepository sessionRepository,
-            ChatMessageRepository messageRepository
+            ChatMessageRepository messageRepository,
+            @Value("${app.ai.model.general:gemini-3.1-flash-lite-preview}") String generalModel,
+            @Value("${app.ai.model.plan:gemini-3.1-pro}") String planModel
     ) {
         this.chatClient = chatClient;
         this.currentWeatherFunction = currentWeatherFunction;
         this.sessionRepository = sessionRepository;
         this.messageRepository = messageRepository;
+        this.generalChatOptions = GoogleGenAiChatOptions.builder().model(generalModel).build();
+        this.planGenerationOptions = GoogleGenAiChatOptions.builder().model(planModel).build();
     }
 
     record IntentClassification(String intent) {
@@ -73,7 +81,8 @@ public class TravelAgentService {
 
         BeanOutputConverter<IntentClassification> intentConverter = new BeanOutputConverter<>(IntentClassification.class);
         IntentClassification classification = chatClient.prompt()
-                .system(s -> s.text("사용자 메시지 의도를 분류하세요. 일정 요청은 'PLAN_CREATION', 나머지는 'GENERAL_CHAT'.\n{formatInstructions}")
+                .options(generalChatOptions)
+                .system(s -> s.text("사용자 메시지 의도를 분류하세요. 여행 일정 생성 요청이면 'PLAN_CREATION', 그 외는 'GENERAL_CHAT'.\n{formatInstructions}")
                         .param("formatInstructions", intentConverter.getFormat()))
                 .user(trimmedMessage)
                 .call()
@@ -86,8 +95,9 @@ public class TravelAgentService {
             aiReplyText = "좋습니다. 여행 일정을 만들기 위해 입력 폼 정보를 알려주세요.";
         } else {
             aiReplyText = chatClient.prompt()
+                    .options(generalChatOptions)
                     .system("당신은 Compass 여행 도우미입니다. 정확하고 간결하게 답변하세요.")
-                    .user("이전 대화 내역:\n" + conversationHistory + "\n\n현재 사용자 메시지: " + trimmedMessage)
+                    .user("이전 대화 이력:\n" + conversationHistory + "\n\n현재 사용자 메시지: " + trimmedMessage)
                     .toolCallbacks(currentWeatherFunction)
                     .call()
                     .content();
@@ -113,17 +123,17 @@ public class TravelAgentService {
         }
 
         return chatClient.prompt()
+                .options(planGenerationOptions)
                 .system(s -> s.text(
                                 "당신은 숙련된 여행 플래너입니다. 사용자 요청을 바탕으로 일정 JSON을 생성하세요.\n" +
                                         "규칙:\n" +
-                                        "1) places는 구체적인 실제 장소명만 사용합니다.\n" +
-                                        "2) day별 동선을 자연스럽게 구성합니다.\n" +
-                                        "3) memo는 장소 추천 이유를 간결히 작성합니다.\n" +
-                                        "4) 응답은 JSON만 반환합니다.\n{formatInstructions}")
+                                        "1) places는 실제 장소명을 사용합니다.\n" +
+                                        "2) 동선은 현실적으로 구성합니다.\n" +
+                                        "3) memo는 추천 이유를 간결히 작성합니다.\n" +
+                                        "4) 반드시 JSON만 반환합니다.\n{formatInstructions}")
                         .param("formatInstructions", converter.getFormat()))
-                .user("사용자 최종 요청: " + request + "\n\n참고 대화 내역:\n" + historySummary)
+                .user("사용자 최종 요청: " + request + "\n\n참고 대화 이력:\n" + historySummary)
                 .call()
                 .entity(converter);
     }
 }
-

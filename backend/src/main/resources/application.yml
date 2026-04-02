@@ -2,18 +2,18 @@ spring:
   application:
     name: compass-backend
 
-  # ★ 핵심 추가: 아직 Step 4(기억 장착) 전이므로, 에러를 유발하는 Vector DB 자동 설정을 잠시 꺼둡니다.
+  # ???듭떖 異붽?: ?꾩쭅 Step 4(湲곗뼲 ?μ갑) ?꾩씠誘濡? ?먮윭瑜??좊컻?섎뒗 Vector DB ?먮룞 ?ㅼ젙???좎떆 爰쇰몼?덈떎.
   autoconfigure:
     exclude: org.springframework.ai.vectorstore.pgvector.autoconfigure.PgVectorStoreAutoConfiguration
 
-  # 1. Database (PostgreSQL - pgvector 이미지 설정 반영)
+  # 1. Database (PostgreSQL - pgvector ?대?吏 ?ㅼ젙 諛섏쁺)
   datasource:
     url: jdbc:postgresql://${DB_HOST:127.0.0.1}:${DB_PORT:5433}/${DB_NAME:compass}
     username: ${DB_USERNAME:compass_user}
     password: ${DB_PASSWORD:compass_password}
     driver-class-name: org.postgresql.Driver
 
-  # 2. JPA & Hibernate (테이블 자동 생성 및 쿼리 로그 설정)
+  # 2. JPA & Hibernate (?뚯씠釉??먮룞 ?앹꽦 諛?荑쇰━ 濡쒓렇 ?ㅼ젙)
   jpa:
     hibernate:
       ddl-auto: update
@@ -24,7 +24,7 @@ spring:
         default_batch_fetch_size: 100
         dialect: org.hibernate.dialect.PostgreSQLDialect
 
-  # 3. Google OAuth2 (기존 유지)
+  # 3. Google OAuth2 (湲곗〈 ?좎?)
   security:
     oauth2:
       client:
@@ -36,48 +36,51 @@ spring:
               - profile
               - email
 
-  # 4. Spring AI 설정 (Google AI Studio - Gemini 3.1 Flash Lite 적용)
+  # 4. Spring AI ?ㅼ젙 (Google AI Studio - Gemini 3.1 Flash Lite ?곸슜)
   ai:
     google:
       genai:
         api-key: ${GOOGLE_AI_STUDIO_API_KEY}
         chat:
           options:
-            # 테스트 비용 걱정 없는 최신 경량 모델 세팅!
+            # ?뚯뒪??鍮꾩슜 嫄깆젙 ?녿뒗 理쒖떊 寃쎈웾 紐⑤뜽 ?명똿!
             model: gemini-3.1-flash-lite-preview
             temperature: 0.7
             functions:
               - currentWeatherFunction
-    # 벡터 저장소(pgvector) 자동 설정
+    # 踰≫꽣 ??μ냼(pgvector) ?먮룞 ?ㅼ젙
     vectorstore:
       pgvector:
         table-name: travel_embeddings
-        dimensions: 768 # Gemini 임베딩 모델 기준
+        dimensions: 768 # Gemini ?꾨쿋??紐⑤뜽 湲곗?
 
-  # 5. Redis (기존 유지)
+  # 5. Redis (湲곗〈 ?좎?)
   data:
     redis:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
 
-# 6. JWT Secret (기존 유지)
+# 6. JWT Secret (湲곗〈 ?좎?)
 jwt:
   secret: ${JWT_SECRET}
 
-# AI 동작 과정을 자세히 보기 위한 디버그 로그
+# AI ?숈옉 怨쇱젙???먯꽭??蹂닿린 ?꾪븳 ?붾쾭洹?濡쒓렇
 logging:
   level:
     org.springframework.ai: DEBUG
 
 
-# OpenWeatherMap API 설정
+# OpenWeatherMap API ?ㅼ젙
 weather:
   api-key: ${WEATHER_API_KEY:default}
 
-# 프론트 연동 설정
+# ?꾨줎???곕룞 ?ㅼ젙
 app:
+  ai:
+    model:
+      general: ${AI_MODEL_GENERAL:gemini-3.1-flash-lite-preview}
+      plan: ${AI_MODEL_PLAN:gemini-3.1-pro}
   cors:
-    # 콤마(,)로 여러 도메인 지정 가능
     allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173,http://127.0.0.1:5173}
   oauth2:
     redirect-uri: ${OAUTH2_REDIRECT_URI:http://localhost:5173/oauth2/redirect}
