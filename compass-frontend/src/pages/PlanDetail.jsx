@@ -372,6 +372,22 @@ export default function PlanDetail() {
     loadPlaceDetail(place);
   };
 
+  const getTodayOpeningLine = (openingHours = []) => {
+    if (!openingHours.length) return '';
+    const weekday = new Date().toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase();
+    return openingHours.find((line) => line.toLowerCase().startsWith(weekday)) || '';
+  };
+
+  const isTodayClosed = (openingHours = []) => {
+    const todayLine = getTodayOpeningLine(openingHours).toLowerCase();
+    if (!todayLine) return false;
+    return (
+      todayLine.includes('closed') ||
+      todayLine.includes('휴무') ||
+      todayLine.includes('영업 종료')
+    );
+  };
+
   const startEditMode = () => {
     if (!plan) return;
     setEditableItineraries(cloneItineraries(plan.itineraries || []));
@@ -726,7 +742,7 @@ export default function PlanDetail() {
 
       {detailPlace && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-lg rounded-3xl border border-[#d5e8fa] bg-white p-5 shadow-2xl">
+          <div className="flex max-h-[88vh] w-full max-w-lg flex-col rounded-3xl border border-[#d5e8fa] bg-white p-5 shadow-2xl">
             <h3 className="mb-3 text-lg font-black text-[#1f3550]">{detailPlace.placeName}</h3>
 
             {detailState.loading && (
@@ -743,7 +759,25 @@ export default function PlanDetail() {
             )}
 
             {detailState.data && (
-              <div className="space-y-3 text-sm text-[#3f5f7b]">
+              <div className="space-y-3 overflow-y-auto pr-1 text-sm text-[#3f5f7b]">
+                <div className="flex flex-wrap gap-2">
+                  {detailState.data.isOpenNow === true && (
+                    <span className="rounded-full border border-emerald-200 bg-emerald-100 px-3 py-1.5 text-xs font-black text-emerald-700">
+                      현재 영업중
+                    </span>
+                  )}
+                  {detailState.data.isOpenNow === false && (
+                    <span className="rounded-full border border-rose-200 bg-rose-100 px-3 py-1.5 text-xs font-black text-rose-700">
+                      현재 영업 종료
+                    </span>
+                  )}
+                  {isTodayClosed(detailState.data.openingHours) && (
+                    <span className="rounded-full border border-orange-200 bg-orange-100 px-3 py-1.5 text-xs font-black text-orange-700">
+                      오늘 휴무
+                    </span>
+                  )}
+                </div>
+
                 <p><span className="font-bold text-[#1f3550]">주소</span>: {detailState.data.address || '정보 없음'}</p>
                 <p>
                   <span className="font-bold text-[#1f3550]">평점</span>:{' '}
@@ -757,7 +791,12 @@ export default function PlanDetail() {
                   {detailState.data.openingHours.length > 0 ? (
                     <ul className="mt-1 space-y-1 rounded-xl border border-[#dbeaf9] bg-[#f8fcff] p-3 text-xs">
                       {detailState.data.openingHours.map((line) => (
-                        <li key={line}>{line}</li>
+                        <li
+                          key={line}
+                          className={line === getTodayOpeningLine(detailState.data.openingHours) ? 'font-bold text-[#1f3550]' : ''}
+                        >
+                          {line}
+                        </li>
                       ))}
                     </ul>
                   ) : (
@@ -807,7 +846,7 @@ export default function PlanDetail() {
               </div>
             )}
 
-            <div className="mt-4 flex justify-end">
+            <div className="mt-4 flex justify-end border-t border-[#e5eff8] pt-3">
               <button
                 onClick={() => {
                   setDetailPlace(null);
