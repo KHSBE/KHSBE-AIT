@@ -74,6 +74,34 @@ const parseDurationLikeToMillis = (value) => {
   return null;
 };
 
+const extractLocalizedText = (value) => {
+  if (!value) return null;
+  if (typeof value === 'string' && value.trim()) return value.trim();
+  if (typeof value === 'object') {
+    if (typeof value.text === 'string' && value.text.trim()) return value.text.trim();
+    if (typeof value.localizedText === 'string' && value.localizedText.trim()) return value.localizedText.trim();
+  }
+  return null;
+};
+
+const calculateHaversineDistanceMeters = (origin, destination) => {
+  const lat1 = Number(origin?.lat);
+  const lng1 = Number(origin?.lng);
+  const lat2 = Number(destination?.latitude ?? destination?.lat);
+  const lng2 = Number(destination?.longitude ?? destination?.lng);
+  if (![lat1, lng1, lat2, lng2].every(Number.isFinite)) return null;
+
+  const toRad = (deg) => (deg * Math.PI) / 180;
+  const earthRadius = 6371000;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) * Math.sin(dLng / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return Math.round(earthRadius * c);
+};
+
 const toPolylinePoint = (point) => ({
   lat: typeof point?.lat === 'function' ? point.lat() : Number(point?.lat),
   lng: typeof point?.lng === 'function' ? point.lng() : Number(point?.lng)
@@ -131,6 +159,9 @@ const buildReferenceTravelSummaryKo = (routeInfo) => {
   }
 
   if (parts.length <= 1) return null;
+  if (routeInfo.isFallback) {
+    parts.push('(직선 기준)');
+  }
   return parts.join(' · ');
 };
 
@@ -167,18 +198,14 @@ const computeRouteSegment = async (RouteClass, originPlace, destinationPlace, tr
     null;
 
   const distanceText =
-    typeof localizedValues?.distance === 'string' && localizedValues.distance.trim()
-      ? localizedValues.distance.trim()
-      : typeof localizedValues?.distanceMeters === 'string' && localizedValues.distanceMeters.trim()
-        ? localizedValues.distanceMeters.trim()
-        : null;
+    extractLocalizedText(localizedValues?.distance) ??
+    extractLocalizedText(localizedValues?.distanceMeters) ??
+    null;
 
   const durationText =
-    typeof localizedValues?.duration === 'string' && localizedValues.duration.trim()
-      ? localizedValues.duration.trim()
-      : typeof localizedValues?.staticDuration === 'string' && localizedValues.staticDuration.trim()
-        ? localizedValues.staticDuration.trim()
-        : null;
+    extractLocalizedText(localizedValues?.duration) ??
+    extractLocalizedText(localizedValues?.staticDuration) ??
+    null;
 
   return {
     path,
@@ -477,7 +504,6 @@ export default function PlanDetail() {
           message.includes('REQUEST_DENIED') ||
           message.includes('PERMISSION_DENIED') ||
           message.includes('ROUTES_LIBRARY_UNAVAILABLE') ||
-          message.includes('routes') ||
           message.includes('NotActivatedMapError') ||
           message.includes('legacy API') ||
           message.includes('ApiNotActivatedMapError');
@@ -565,9 +591,25 @@ export default function PlanDetail() {
           selectedTravelMode
         );
 
-        setSelectedPlaceRouteInfo({
+        const fallbackDistance = calculateHaversineDistanceMeters(referencePoint, place);
+        const enrichedInfo = {
           ...routeInfo,
-          travelMode: selectedTravelMode
+          travelMode: selectedTravelMode,
+          isFallback: false
+        };
+
+        if (!toFiniteNumber(enrichedInfo.distanceMeters) && fallbackDistance) {
+          enrichedInfo.distanceMeters = fallbackDistance;
+          enrichedInfo.distanceText = null;
+          enrichedInfo.isFallback = true;
+        }
+
+        if (!enrichedInfo.durationText && !toFiniteNumber(enrichedInfo.durationMillis) && enrichedInfo.distanceMeters) {
+          enrichedInfo.isFallback = true;
+        }
+
+        setSelectedPlaceRouteInfo({
+          ...enrichedInfo
         });
       } catch (error) {
         const message = String(error?.message || '');
@@ -583,7 +625,19 @@ export default function PlanDetail() {
         } else {
           console.error('기준점 이동 정보 계산 실패:', error);
         }
-        setSelectedPlaceRouteInfo(null);
+        const fallbackDistance = calculateHaversineDistanceMeters(referencePoint, place);
+        if (fallbackDistance) {
+          setSelectedPlaceRouteInfo({
+            travelMode: selectedTravelMode,
+            distanceMeters: fallbackDistance,
+            durationMillis: null,
+            distanceText: null,
+            durationText: null,
+            isFallback: true
+          });
+        } else {
+          setSelectedPlaceRouteInfo(null);
+        }
       } finally {
         setIsSelectedPlaceRouteLoading(false);
       }
@@ -1108,10 +1162,18 @@ export default function PlanDetail() {
 
         <div className="absolute left-3 top-28 z-10 flex max-w-[85%] gap-1 overflow-x-auto rounded-full border border-[#d3e8fb] bg-white/95 p-1 shadow-md backdrop-blur lg:left-6 lg:top-32">
           <button
-            onClick={requestCurrentLocation}
+            onClick={() => {
+              if (referencePoint?.source === 'current') {
+                setReferencePoint(null);
+                setCurrentLocation(null);
+                setSelectedPlaceRouteInfo(null);
+                return;
+              }
+              requestCurrentLocation();
+            }}
             className="whitespace-nowrap rounded-full border border-[#cde4f8] bg-white px-3 py-1.5 text-xs font-bold text-[#2d587a] hover:border-[#1f8ef1] hover:text-[#1f8ef1]"
           >
-            내 위치를 기준점으로
+            {referencePoint?.source === 'current' ? '내 위치 기준점 해제' : '내 위치를 기준점으로'}
           </button>
           <button
             onClick={() => {
