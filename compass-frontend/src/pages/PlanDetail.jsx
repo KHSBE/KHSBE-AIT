@@ -19,6 +19,11 @@ import { GoogleMap, useJsApiLoader, Marker, Polyline } from '@react-google-maps/
 import { fetchWithAuth, buildApiUrl } from '../utils/api';
 
 const GOOGLE_MAP_LIBRARIES = ['places'];
+const ROUTE_TRAVEL_MODES = [
+  { value: 'DRIVING', label: '자동차' },
+  { value: 'WALKING', label: '도보' },
+  { value: 'TRANSIT', label: '대중교통' }
+];
 
 const MAP_SIMPLIFIED_STYLES = [
   { featureType: 'poi.business', stylers: [{ visibility: 'off' }] },
@@ -48,19 +53,60 @@ const toLatLngLiteral = (place) => ({
   lng: Number(place.longitude)
 });
 
+const toFiniteNumber = (value) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
 const toPolylinePoint = (point) => ({
   lat: typeof point?.lat === 'function' ? point.lat() : Number(point?.lat),
   lng: typeof point?.lng === 'function' ? point.lng() : Number(point?.lng)
 });
 
-const buildRoutePathFromComputeRoutes = async (RouteClass, places) => {
+const getTravelModeLabel = (travelMode) => {
+  switch (travelMode) {
+    case 'WALK':
+    case 'WALKING':
+      return '도보';
+    case 'TRANSIT':
+      return '대중교통';
+    case 'BICYCLE':
+    case 'TWO_WHEELER':
+      return '이륜차';
+    case 'DRIVE':
+    case 'DRIVING':
+    default:
+      return '자동차';
+  }
+};
+
+const formatDistanceKo = (distanceMeters) => {
+  const meters = toFiniteNumber(distanceMeters);
+  if (!meters) return '거리 정보 없음';
+  if (meters < 1000) return `${Math.round(meters)}m`;
+  if (meters < 10000) return `${(meters / 1000).toFixed(1)}km`;
+  return `${Math.round(meters / 1000)}km`;
+};
+
+const formatDurationKo = (durationMillis) => {
+  const millis = toFiniteNumber(durationMillis);
+  if (!millis) return '시간 정보 없음';
+
+  const totalMinutes = Math.max(1, Math.round(millis / 60000));
+  if (totalMinutes < 60) return `${totalMinutes}분`;
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return minutes ? `${hours}시간 ${minutes}분` : `${hours}시간`;
+};
+
+const buildRoutePathFromComputeRoutes = async (RouteClass, places, travelMode) => {
   if (!places.length) return [];
 
   const request = {
     origin: toLatLngLiteral(places[0]),
     destination: toLatLngLiteral(places[places.length - 1]),
-    travelMode: 'DRIVING',
-    fields: ['path']
+    travelMode,
+    fields: ['path', 'legs.distanceMeters', 'legs.durationMillis']
   };
 
   if (places.length > 2) {
@@ -70,8 +116,22 @@ const buildRoutePathFromComputeRoutes = async (RouteClass, places) => {
   }
 
   const { routes } = await RouteClass.computeRoutes(request);
-  const rawPath = routes?.[0]?.path || [];
-  return rawPath.map(toPolylinePoint).filter((point) => Number.isFinite(point.lat) && Number.isFinite(point.lng));
+  const route = routes?.[0];
+  const rawPath = route?.path || [];
+
+  const path = rawPath
+    .map(toPolylinePoint)
+    .filter((point) => Number.isFinite(point.lat) && Number.isFinite(point.lng));
+
+  const segments = (route?.legs || []).map((leg, index) => ({
+    fromKey: places[index]?.placeKey || null,
+    toKey: places[index + 1]?.placeKey || null,
+    travelMode,
+    distanceMeters: toFiniteNumber(leg?.distanceMeters),
+    durationMillis: toFiniteNumber(leg?.durationMillis)
+  }));
+
+  return { path, segments };
 };
 
 const toNumberOrZero = (value) => {
@@ -165,8 +225,10 @@ export default function PlanDetail() {
   const [detailState, setDetailState] = useState({ loading: false, error: '', data: null });
   const [focusedPlaceKey, setFocusedPlaceKey] = useState(null);
   const [routePath, setRoutePath] = useState([]);
+  const [routeLegByFromKey, setRouteLegByFromKey] = useState({});
   const [isRouteLoading, setIsRouteLoading] = useState(false);
   const [isDirectionsDenied, setIsDirectionsDenied] = useState(false);
+  const [selectedTravelMode, setSelectedTravelMode] = useState('DRIVING');
   const [isMapCollapsed, setIsMapCollapsed] = useState(false);
   const placesServiceRef = useRef(null);
 
@@ -282,12 +344,14 @@ export default function PlanDetail() {
   useEffect(() => {
     if (!isLoaded || !window.google?.maps || currentDayPlaces.length < 2) {
       setRoutePath(currentDayPlaces.map(toLatLngLiteral));
+      setRouteLegByFromKey({});
       setIsRouteLoading(false);
       return;
     }
 
     if (isDirectionsDenied) {
       setRoutePath(currentDayPlaces.map(toLatLngLiteral));
+      setRouteLegByFromKey({});
       setIsRouteLoading(false);
       return;
     }
@@ -296,6 +360,7 @@ export default function PlanDetail() {
 
     const loadRoutePath = async () => {
       setIsRouteLoading(true);
+      setRouteLegByFromKey({});
       try {
         const routesLibrary = await window.google.maps.importLibrary('routes');
         const RouteClass = routesLibrary?.Route;
@@ -303,8 +368,19 @@ export default function PlanDetail() {
           throw new Error('ROUTES_LIBRARY_UNAVAILABLE');
         }
 
-        const path = await buildRoutePathFromComputeRoutes(RouteClass, currentDayPlaces);
+        const { path, segments } = await buildRoutePathFromComputeRoutes(
+          RouteClass,
+          currentDayPlaces,
+          selectedTravelMode
+        );
         if (cancelled) return;
+
+        const nextRouteLegByFromKey = {};
+        segments.forEach((segment) => {
+          if (segment.fromKey) nextRouteLegByFromKey[segment.fromKey] = segment;
+        });
+        setRouteLegByFromKey(nextRouteLegByFromKey);
+
         if (path.length > 1) {
           setRoutePath(path);
         } else {
@@ -330,6 +406,7 @@ export default function PlanDetail() {
 
         if (!cancelled) {
           setRoutePath(currentDayPlaces.map(toLatLngLiteral));
+          setRouteLegByFromKey({});
         }
       } finally {
         if (!cancelled) setIsRouteLoading(false);
@@ -340,7 +417,11 @@ export default function PlanDetail() {
     return () => {
       cancelled = true;
     };
-  }, [isLoaded, currentDayPlaces, isDirectionsDenied]);
+  }, [isLoaded, currentDayPlaces, isDirectionsDenied, selectedTravelMode]);
+  
+  useEffect(() => {
+    setRouteLegByFromKey({});
+  }, [selectedTravelMode, selectedDay]);
 
   const onLoadMap = useCallback((map) => {
     setMapInstance(map);
@@ -707,6 +788,7 @@ export default function PlanDetail() {
                     const placeKey = buildPlaceKey(day.dayNumber, idx, place);
                     const focusable = day.dayNumber === selectedDay && hasValidCoordinates(place);
                     const isFocused = focusedPlaceKey === placeKey;
+                    const routeLeg = day.dayNumber === selectedDay ? routeLegByFromKey[placeKey] : null;
                     return (
                   <div
                     key={placeKey}
@@ -766,6 +848,12 @@ export default function PlanDetail() {
                         )}
                       </div>
 
+                      {routeLeg && (
+                        <p className="mt-2 rounded-lg border border-[#d9ebfb] bg-[#eef7ff] px-3 py-2 text-xs font-semibold text-[#2b5f87]">
+                          다음 이동 · {getTravelModeLabel(routeLeg.travelMode)} {formatDurationKo(routeLeg.durationMillis)} · {formatDistanceKo(routeLeg.distanceMeters)}
+                        </p>
+                      )}
+
                       {place.memo && (
                         <p className="mt-3 flex items-start gap-2 rounded-xl border border-[#d9ebfb] bg-white p-3 text-sm leading-relaxed text-[#4b6177]">
                           <Bot size={16} className="mt-0.5 shrink-0 text-[#1f8ef1]" /> {place.memo}
@@ -803,6 +891,22 @@ export default function PlanDetail() {
               }`}
             >
               Day {day.dayNumber}
+            </button>
+          ))}
+        </div>
+
+        <div className="absolute left-3 top-16 z-10 flex max-w-[85%] gap-1 overflow-x-auto rounded-full border border-[#d3e8fb] bg-white/95 p-1 shadow-md backdrop-blur lg:left-6 lg:top-20 lg:max-w-[70%]">
+          {ROUTE_TRAVEL_MODES.map((mode) => (
+            <button
+              key={mode.value}
+              onClick={() => setSelectedTravelMode(mode.value)}
+              className={`whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-bold transition ${
+                selectedTravelMode === mode.value
+                  ? 'bg-[#1f8ef1] text-white shadow'
+                  : 'text-[#2d587a] hover:bg-[#eaf6ff]'
+              }`}
+            >
+              {mode.label}
             </button>
           ))}
         </div>
@@ -871,7 +975,7 @@ export default function PlanDetail() {
         {isRouteLoading && (
           <div className="absolute bottom-3 left-3 z-10 flex items-center gap-2 rounded-full border border-[#cde4f8] bg-white/95 px-3 py-1.5 text-xs font-bold text-[#2d587a] shadow-lg backdrop-blur">
             <Loader2 size={12} className="animate-spin text-[#1f8ef1]" />
-            이동 경로 계산 중
+            {getTravelModeLabel(selectedTravelMode)} 경로 계산 중
           </div>
         )}
 
