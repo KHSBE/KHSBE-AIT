@@ -29,6 +29,22 @@ const MAP_SIMPLIFIED_STYLES = [
   { featureType: 'administrative.neighborhood', stylers: [{ visibility: 'off' }] }
 ];
 
+const WEEKDAY_EN_TO_KO = {
+  monday: '월요일',
+  tuesday: '화요일',
+  wednesday: '수요일',
+  thursday: '목요일',
+  friday: '금요일',
+  saturday: '토요일',
+  sunday: '일요일'
+};
+
+const BUSINESS_STATUS_KO = {
+  OPERATIONAL: '정상 영업',
+  CLOSED_TEMPORARILY: '임시 휴업',
+  CLOSED_PERMANENTLY: '영구 폐업'
+};
+
 const cloneItineraries = (itineraries = []) =>
   itineraries.map((day) => ({
     ...day,
@@ -56,6 +72,31 @@ const toPolylinePoint = (point) => ({
 
 const isMobileViewport = () =>
   typeof window !== 'undefined' && window.matchMedia('(max-width: 1023px)').matches;
+
+const localizeBusinessStatus = (status) => {
+  if (!status) return '정보 없음';
+  return BUSINESS_STATUS_KO[status] || status;
+};
+
+const localizeWeekdayOpeningLine = (line) => {
+  if (!line) return '';
+  const match = line.match(/^([A-Za-z]+)(\s*:\s*)(.*)$/);
+  if (!match) return line;
+
+  const [, enDay, sep, rest] = match;
+  const koDay = WEEKDAY_EN_TO_KO[enDay.toLowerCase()];
+  if (!koDay) return line;
+  return `${koDay}${sep}${rest}`;
+};
+
+const getCurrentWeekdayLabels = () => {
+  const weekdayIndex = new Date().getDay(); // 0: Sunday
+  const enDays = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+  const koDays = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일'];
+  const en = enDays[weekdayIndex];
+  const ko = koDays[weekdayIndex];
+  return [en, ko, ko.replace('요일', '')];
+};
 
 const computeRouteSegment = async (RouteClass, originPlace, destinationPlace, travelMode) => {
   const { routes } = await RouteClass.computeRoutes({
@@ -223,7 +264,9 @@ export default function PlanDetail() {
   const { isLoaded } = useJsApiLoader({
     id: 'google-map-script',
     googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY,
-    libraries: GOOGLE_MAP_LIBRARIES
+    libraries: GOOGLE_MAP_LIBRARIES,
+    language: 'ko',
+    region: 'KR'
   });
 
   useEffect(() => {
@@ -558,6 +601,7 @@ export default function PlanDetail() {
           rating: detail.rating ?? null,
           userRatingsTotal: detail.user_ratings_total ?? null,
           openingHours: detail.opening_hours?.weekday_text || [],
+          openingHoursLocalized: (detail.opening_hours?.weekday_text || []).map(localizeWeekdayOpeningLine),
           isOpenNow:
             typeof detail.opening_hours?.isOpen === 'function'
               ? detail.opening_hours.isOpen()
@@ -566,6 +610,7 @@ export default function PlanDetail() {
           website: detail.website || '',
           mapUrl: detail.url || '',
           businessStatus: detail.business_status || '',
+          businessStatusLabel: localizeBusinessStatus(detail.business_status),
           reviews: (detail.reviews || []).slice(0, 3).map((review) => ({
             author: review.author_name || '사용자',
             rating: review.rating ?? null,
@@ -586,8 +631,13 @@ export default function PlanDetail() {
 
   const getTodayOpeningLine = (openingHours = []) => {
     if (!openingHours.length) return '';
-    const weekday = new Date().toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase();
-    return openingHours.find((line) => line.toLowerCase().startsWith(weekday)) || '';
+    const todayLabels = getCurrentWeekdayLabels().map((label) => label.toLowerCase());
+    return (
+      openingHours.find((line) => {
+        const prefix = String(line).split(':')[0].trim().toLowerCase();
+        return todayLabels.some((label) => prefix === label);
+      }) || ''
+    );
   };
 
   const isTodayClosed = (openingHours = []) => {
@@ -1110,17 +1160,17 @@ export default function PlanDetail() {
                   <span className="font-bold text-[#1f3550]">평점</span>:{' '}
                   {detailState.data.rating ? `${detailState.data.rating} (${detailState.data.userRatingsTotal || 0})` : '정보 없음'}
                 </p>
-                <p><span className="font-bold text-[#1f3550]">영업 상태</span>: {detailState.data.businessStatus || '정보 없음'}</p>
+                <p><span className="font-bold text-[#1f3550]">영업 상태</span>: {detailState.data.businessStatusLabel || '정보 없음'}</p>
                 <p><span className="font-bold text-[#1f3550]">전화번호</span>: {detailState.data.phone || '정보 없음'}</p>
 
                 <div>
                   <p className="font-bold text-[#1f3550]">영업시간</p>
-                  {detailState.data.openingHours.length > 0 ? (
+                  {detailState.data.openingHoursLocalized.length > 0 ? (
                     <ul className="mt-1 space-y-1 rounded-xl border border-[#dbeaf9] bg-[#f8fcff] p-3 text-xs">
-                      {detailState.data.openingHours.map((line) => (
+                      {detailState.data.openingHoursLocalized.map((line) => (
                         <li
                           key={line}
-                          className={line === getTodayOpeningLine(detailState.data.openingHours) ? 'font-bold text-[#1f3550]' : ''}
+                          className={line === getTodayOpeningLine(detailState.data.openingHoursLocalized) ? 'font-bold text-[#1f3550]' : ''}
                         >
                           {line}
                         </li>
