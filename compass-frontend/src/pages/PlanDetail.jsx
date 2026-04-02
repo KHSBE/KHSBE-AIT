@@ -99,39 +99,58 @@ const formatDurationKo = (durationMillis) => {
   return minutes ? `${hours}시간 ${minutes}분` : `${hours}시간`;
 };
 
-const buildRoutePathFromComputeRoutes = async (RouteClass, places, travelMode) => {
-  if (!places.length) return [];
-
-  const request = {
-    origin: toLatLngLiteral(places[0]),
-    destination: toLatLngLiteral(places[places.length - 1]),
+const computeRouteSegment = async (RouteClass, originPlace, destinationPlace, travelMode) => {
+  const { routes } = await RouteClass.computeRoutes({
+    origin: toLatLngLiteral(originPlace),
+    destination: toLatLngLiteral(destinationPlace),
     travelMode,
-    fields: ['path', 'legs.distanceMeters', 'legs.durationMillis']
-  };
+    fields: ['path', 'distanceMeters', 'durationMillis']
+  });
 
-  if (places.length > 2) {
-    request.intermediates = places.slice(1, -1).map((place) => ({
-      location: toLatLngLiteral(place)
-    }));
-  }
-
-  const { routes } = await RouteClass.computeRoutes(request);
   const route = routes?.[0];
   const rawPath = route?.path || [];
-
   const path = rawPath
     .map(toPolylinePoint)
     .filter((point) => Number.isFinite(point.lat) && Number.isFinite(point.lng));
 
-  const segments = (route?.legs || []).map((leg, index) => ({
-    fromKey: places[index]?.placeKey || null,
-    toKey: places[index + 1]?.placeKey || null,
-    travelMode,
-    distanceMeters: toFiniteNumber(leg?.distanceMeters),
-    durationMillis: toFiniteNumber(leg?.durationMillis)
-  }));
+  return {
+    path,
+    distanceMeters: toFiniteNumber(route?.distanceMeters),
+    durationMillis: toFiniteNumber(route?.durationMillis)
+  };
+};
 
-  return { path, segments };
+const buildRoutePathFromComputeRoutes = async (RouteClass, places, travelMode) => {
+  if (!places.length) return { path: [], segments: [] };
+  if (places.length === 1) return { path: [toLatLngLiteral(places[0])], segments: [] };
+
+  const mergedPath = [];
+  const segments = [];
+
+  for (let i = 0; i < places.length - 1; i += 1) {
+    const fromPlace = places[i];
+    const toPlace = places[i + 1];
+    const segmentResult = await computeRouteSegment(RouteClass, fromPlace, toPlace, travelMode);
+
+    const segmentPath = [...segmentResult.path];
+    if (segmentPath.length > 0) {
+      if (mergedPath.length > 0) segmentPath.shift();
+      mergedPath.push(...segmentPath);
+    }
+
+    segments.push({
+      fromKey: fromPlace.placeKey || null,
+      toKey: toPlace.placeKey || null,
+      travelMode,
+      distanceMeters: segmentResult.distanceMeters,
+      durationMillis: segmentResult.durationMillis
+    });
+  }
+
+  return {
+    path: mergedPath.length ? mergedPath : places.map(toLatLngLiteral),
+    segments
+  };
 };
 
 const toNumberOrZero = (value) => {
