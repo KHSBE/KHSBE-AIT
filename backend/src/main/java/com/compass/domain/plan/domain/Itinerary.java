@@ -30,7 +30,8 @@ public class Itinerary {
     private TravelPlan travelPlan;
 
     @BatchSize(size = 100)
-    @OneToMany(mappedBy = "itinerary", cascade = CascadeType.ALL)
+    @OneToMany(mappedBy = "itinerary", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OrderBy("visitOrder ASC, id ASC")
     @Builder.Default
     private List<Place> places = new ArrayList<>();
 }

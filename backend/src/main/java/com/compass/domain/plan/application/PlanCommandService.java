@@ -1,14 +1,20 @@
 package com.compass.domain.plan.application;
 
 import com.compass.domain.plan.dao.TravelPlanRepository;
+import com.compass.domain.plan.dao.PlaceRepository;
 import com.compass.domain.plan.domain.*;
 import com.compass.domain.agent.dto.AiPlanResponse;
+import com.compass.domain.plan.dto.UpdateItineraryPlacesRequest;
 import com.compass.domain.user.domain.User;
+import com.compass.global.error.BusinessException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
 import java.time.LocalDate;
+import java.util.Objects;
 
 // 여행 계획 저장 서비스
 @Slf4j
@@ -18,6 +24,7 @@ import java.time.LocalDate;
 public class PlanCommandService {
 
     private final TravelPlanRepository planRepository;
+    private final PlaceRepository placeRepository;
 
     // ★ 파라미터를 String에서 AiPlanResponse 객체로 바로 받습니다! (ObjectMapper 삭제)
     public Long savePlanFromAi(User user, AiPlanResponse res) {
@@ -45,6 +52,36 @@ public class PlanCommandService {
         }
     }
 
+    public TravelPlan updateItineraryPlaces(User user, Long planId, Long itineraryId, UpdateItineraryPlacesRequest request) {
+        TravelPlan plan = planRepository.findByIdAndUserIdWithDetails(planId, user.getId())
+                .orElseThrow(() -> new BusinessException("Plan not found.", HttpStatus.NOT_FOUND));
+
+        Itinerary itinerary = plan.getItineraries().stream()
+                .filter(item -> Objects.equals(item.getId(), itineraryId))
+                .findFirst()
+                .orElseThrow(() -> new BusinessException("Itinerary not found in this plan.", HttpStatus.NOT_FOUND));
+
+        placeRepository.deleteByItineraryId(itineraryId);
+        itinerary.getPlaces().clear();
+
+        int visitOrder = 1;
+        for (UpdateItineraryPlacesRequest.PlaceItem item : request.places()) {
+            itinerary.getPlaces().add(
+                    Place.builder()
+                            .itinerary(itinerary)
+                            .placeName(item.placeName().trim())
+                            .googlePlaceId(item.googlePlaceId())
+                            .latitude(item.latitude() != null ? item.latitude() : 0.0)
+                            .longitude(item.longitude() != null ? item.longitude() : 0.0)
+                            .visitOrder(visitOrder++)
+                            .memo(item.memo())
+                            .build()
+            );
+        }
+
+        return plan;
+    }
+
     // ★ 회원님이 기존에 완벽하게 짜두신 매핑 로직 그대로 사용!
     private void mapItineraries(TravelPlan plan, AiPlanResponse res) {
         if (res.itineraries() == null) return;
@@ -58,12 +95,14 @@ public class PlanCommandService {
                     .build();
 
             if (day.places() != null) {
+                int visitOrder = 1;
                 for (var p : day.places()) {
                     itinerary.getPlaces().add(Place.builder()
                             .itinerary(itinerary)
                             .placeName(p.name())
                             .latitude(p.lat() != null ? p.lat() : 0.0)
                             .longitude(p.lng() != null ? p.lng() : 0.0)
+                            .visitOrder(visitOrder++)
                             .memo(p.memo())
                             .build());
                 }
