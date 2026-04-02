@@ -103,6 +103,32 @@ const toNumberOrZero = (value) => {
   return Number.isFinite(parsed) ? parsed : 0;
 };
 
+const buildGoogleDirectionsLink = (place, detailData) => {
+  const lat = Number(place?.latitude);
+  const lng = Number(place?.longitude);
+  const hasCoordinates = Number.isFinite(lat) && Number.isFinite(lng) && (lat !== 0 || lng !== 0);
+  const destinationText = (detailData?.address || place?.placeName || '').trim();
+
+  const params = new URLSearchParams({
+    api: '1',
+    travelmode: 'driving'
+  });
+
+  if (hasCoordinates) {
+    params.set('destination', `${lat},${lng}`);
+  } else if (destinationText) {
+    params.set('destination', destinationText);
+  } else {
+    return null;
+  }
+
+  if (detailData?.placeId) {
+    params.set('destination_place_id', detailData.placeId);
+  }
+
+  return `https://www.google.com/maps/dir/?${params.toString()}`;
+};
+
 const searchPlaces = (service, query) =>
   new Promise((resolve, reject) => {
     service.textSearch({ query }, (results, status) => {
@@ -633,6 +659,11 @@ export default function PlanDetail() {
     }
   };
 
+  const googleDirectionsUrl =
+    detailPlace && detailState.data
+      ? buildGoogleDirectionsLink(detailPlace, detailState.data)
+      : null;
+
   if (isLoading) {
     return (
       <div className="flex h-[calc(100vh-76px)] items-center justify-center">
@@ -1143,16 +1174,33 @@ export default function PlanDetail() {
               )}
             </div>
 
-            <div className="mt-4 flex justify-end border-t border-[#e5eff8] pt-3">
+            <div className="mt-4 border-t border-[#e5eff8] pt-3">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                {googleDirectionsUrl ? (
+                  <a
+                    href={googleDirectionsUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center justify-center rounded-xl bg-[#1f8ef1] px-4 py-2 text-sm font-black text-white shadow-sm transition hover:bg-[#1878cc]"
+                  >
+                    구글 지도 길찾기
+                  </a>
+                ) : (
+                  <span className="inline-flex items-center justify-center rounded-xl border border-[#d8e8f7] bg-[#f5fbff] px-4 py-2 text-sm font-bold text-[#5d7b96]">
+                    길찾기용 위치 정보 없음
+                  </span>
+                )}
+
               <button
                 onClick={() => {
                   setDetailPlace(null);
                   setDetailState({ loading: false, error: '', data: null });
                 }}
-                className="w-full rounded-xl bg-[#1f8ef1] px-4 py-2 text-sm font-bold text-white sm:w-auto"
+                className="w-full rounded-xl border border-[#cde4f8] bg-white px-4 py-2 text-sm font-bold text-[#2d587a] transition hover:border-[#1f8ef1] hover:text-[#1f8ef1] sm:w-auto"
               >
                 닫기
               </button>
+              </div>
             </div>
           </div>
         </div>
