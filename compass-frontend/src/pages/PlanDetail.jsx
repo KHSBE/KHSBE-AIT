@@ -48,42 +48,30 @@ const toLatLngLiteral = (place) => ({
   lng: Number(place.longitude)
 });
 
-const getDirectionsSegmentPath = (service, origin, destination) =>
-  new Promise((resolve, reject) => {
-    service.route(
-      {
-        origin,
-        destination,
-        travelMode: window.google.maps.TravelMode.DRIVING
-      },
-      (result, status) => {
-        if (status === window.google.maps.DirectionsStatus.OK && result?.routes?.length) {
-          const path = result.routes[0].overview_path.map((point) => ({
-            lat: point.lat(),
-            lng: point.lng()
-          }));
-          resolve(path);
-          return;
-        }
-        reject(new Error(`Directions 실패: ${status}`));
-      }
-    );
-  });
+const toPolylinePoint = (point) => ({
+  lat: typeof point?.lat === 'function' ? point.lat() : Number(point?.lat),
+  lng: typeof point?.lng === 'function' ? point.lng() : Number(point?.lng)
+});
 
-const buildDirectionsPath = async (service, places) => {
-  const mergedPath = [];
+const buildRoutePathFromComputeRoutes = async (RouteClass, places) => {
+  if (!places.length) return [];
 
-  for (let i = 0; i < places.length - 1; i += 1) {
-    const origin = toLatLngLiteral(places[i]);
-    const destination = toLatLngLiteral(places[i + 1]);
-    const segment = await getDirectionsSegmentPath(service, origin, destination);
-    if (!segment.length) continue;
+  const request = {
+    origin: toLatLngLiteral(places[0]),
+    destination: toLatLngLiteral(places[places.length - 1]),
+    travelMode: 'DRIVING',
+    fields: ['path']
+  };
 
-    if (mergedPath.length > 0) segment.shift();
-    mergedPath.push(...segment);
+  if (places.length > 2) {
+    request.intermediates = places.slice(1, -1).map((place) => ({
+      location: toLatLngLiteral(place)
+    }));
   }
 
-  return mergedPath;
+  const { routes } = await RouteClass.computeRoutes(request);
+  const rawPath = routes?.[0]?.path || [];
+  return rawPath.map(toPolylinePoint).filter((point) => Number.isFinite(point.lat) && Number.isFinite(point.lng));
 };
 
 const toNumberOrZero = (value) => {
@@ -309,8 +297,13 @@ export default function PlanDetail() {
     const loadRoutePath = async () => {
       setIsRouteLoading(true);
       try {
-        const directionsService = new window.google.maps.DirectionsService();
-        const path = await buildDirectionsPath(directionsService, currentDayPlaces);
+        const routesLibrary = await window.google.maps.importLibrary('routes');
+        const RouteClass = routesLibrary?.Route;
+        if (!RouteClass) {
+          throw new Error('ROUTES_LIBRARY_UNAVAILABLE');
+        }
+
+        const path = await buildRoutePathFromComputeRoutes(RouteClass, currentDayPlaces);
         if (cancelled) return;
         if (path.length > 1) {
           setRoutePath(path);
@@ -321,15 +314,18 @@ export default function PlanDetail() {
         const message = String(error?.message || '');
         const isPermissionDenied =
           message.includes('REQUEST_DENIED') ||
+          message.includes('PERMISSION_DENIED') ||
+          message.includes('ROUTES_LIBRARY_UNAVAILABLE') ||
+          message.includes('routes') ||
           message.includes('NotActivatedMapError') ||
           message.includes('legacy API') ||
-          message.includes('DirectionsService');
+          message.includes('ApiNotActivatedMapError');
 
         if (isPermissionDenied) {
-          console.warn('Directions 권한 없음. 직선 경로 모드로 전환합니다.');
+          console.warn('Routes API 권한 없음. 직선 경로 모드로 전환합니다.');
           setIsDirectionsDenied(true);
         } else {
-          console.error('Directions 경로 계산 실패:', error);
+          console.error('Routes 경로 계산 실패:', error);
         }
 
         if (!cancelled) {
