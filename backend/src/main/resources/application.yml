@@ -37,7 +37,7 @@ spring:
       genai:
         vertex-ai: ${GOOGLE_GENAI_VERTEX_AI:true}
         project-id: ${GOOGLE_PROJECT_ID}
-        location: ${GOOGLE_CLOUD_LOCATION:us-central1}
+        location: ${GOOGLE_CLOUD_LOCATION:global}
         credentials-uri: ${GOOGLE_CREDENTIALS_URI}
         chat:
           options:
