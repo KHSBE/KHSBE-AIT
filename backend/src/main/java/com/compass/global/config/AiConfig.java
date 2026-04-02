@@ -5,6 +5,7 @@ import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.google.genai.GoogleGenAiChatOptions;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.ai.tool.function.FunctionToolCallback;
+import org.springframework.context.annotation.Primary;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -19,6 +20,7 @@ public class AiConfig {
             "정확하고 실용적인 답변을 우선으로 제공합니다.";
 
     @Bean("generalChatClient")
+    @Primary
     public ChatClient generalChatClient(
             ChatClient.Builder builder,
             @Value("${app.ai.model.general:gemini-3.1-flash-lite-preview}") String generalModel
