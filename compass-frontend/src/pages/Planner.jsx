@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+﻿import { useState, useRef, useEffect, useCallback } from 'react';
 import {
   Send,
   Bot,
@@ -17,8 +17,8 @@ import {
 } from 'lucide-react';
 import { fetchWithAuth, buildApiUrl } from '../utils/api';
 
-const BOT_WELCOME_MESSAGE = '안녕하세요. 어디로 여행을 떠나고 싶으신가요?';
-const BOT_NEW_CHAT_MESSAGE = '새로운 여행 계획을 시작해볼까요? 목적지나 스타일을 알려주세요.';
+const BOT_WELCOME_MESSAGE = '??덈??뤾쉭?? ??逾믤에???六???醫딄돌????좎몵?醫???';
+const BOT_NEW_CHAT_MESSAGE = '??덉쨮????六??④쑵?????뽰삂???득틦??뒄? 筌뤴뫗?삼쭪????????깆뱽 ???젻雅뚯눘苑??';
 
 export default function Planner() {
   const [sessions, setSessions] = useState([]);
@@ -40,7 +40,7 @@ export default function Planner() {
     accommodation: '',
     startDate: '',
     endDate: '',
-    companion: '혼자',
+    companion: '??깆쁽',
     style: ''
   });
 
@@ -73,7 +73,7 @@ export default function Planner() {
   const showQuotaToast = (message) => {
     setToast({
       visible: true,
-      message: message || '요청 한도를 초과했습니다. 잠시 후 다시 시도해 주세요.'
+      message: message || '?遺욧퍕 ??뺣즲???λ뜃???됰뮸??덈뼄. ?醫롫뻻 ????쇰뻻 ??뺣즲??雅뚯눘苑??'
     });
   };
 
@@ -87,36 +87,38 @@ export default function Planner() {
   };
 
   const fetchSessions = useCallback(async () => {
+    if (!localStorage.getItem('accessToken')) return;
+
     try {
       const response = await fetchWithAuth(buildApiUrl('/api/chat/sessions'), { headers: getHeaders() });
+      if (!response.ok) return;
       const data = await response.json();
 
       if (data.success) {
         setSessions(data.data || []);
       }
     } catch (error) {
-      console.error('세션 목록 로딩 실패:', error);
+      console.error('?紐꾨?筌뤴뫖以?嚥≪뮆逾???쎈솭:', error);
     }
   }, []);
 
-  const fetchQuota = useCallback(async (sessionId) => {
+  const fetchQuota = useCallback(async () => {
+    if (!localStorage.getItem('accessToken')) return;
+
     setIsQuotaLoading(true);
     try {
-      const query = sessionId ? `?sessionId=${sessionId}` : '';
-      const response = await fetchWithAuth(buildApiUrl(`/api/agent/quota${query}`), {
+      const response = await fetchWithAuth(buildApiUrl('/api/agent/quota'), {
         headers: getHeaders()
       });
 
-      if (!response.ok) {
-        throw new Error('쿼터 조회 실패');
-      }
+      if (!response.ok) return;
 
       const data = await response.json();
       if (data?.success) {
         setQuota(data.data);
       }
     } catch (error) {
-      console.error('쿼터 조회 실패:', error);
+      console.error('?묒눛苑?鈺곌퀬????쎈솭:', error);
       setQuota(null);
     } finally {
       setIsQuotaLoading(false);
@@ -125,11 +127,10 @@ export default function Planner() {
 
   useEffect(() => {
     fetchSessions();
-    fetchQuota(null);
-  }, [fetchQuota, fetchSessions]);
+  }, [fetchSessions]);
 
   useEffect(() => {
-    fetchQuota(currentSessionId);
+    fetchQuota();
   }, [currentSessionId, fetchQuota]);
 
   const loadSession = async (sessionId) => {
@@ -152,8 +153,8 @@ export default function Planner() {
         setMessages(history.length > 0 ? history : [{ sender: 'bot', text: BOT_WELCOME_MESSAGE }]);
       }
     } catch (error) {
-      console.error('세션 불러오기 실패:', error);
-      setMessages([{ sender: 'bot', text: '세션을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.' }]);
+      console.error('?紐꾨??븍뜄???븍┛ ??쎈솭:', error);
+      setMessages([{ sender: 'bot', text: '?紐꾨???븍뜄???? 筌륁궢六??щ빍?? ?醫롫뻻 ????쇰뻻 ??뺣즲??雅뚯눘苑??' }]);
     } finally {
       setIsLoading(false);
     }
@@ -167,7 +168,7 @@ export default function Planner() {
 
   const deleteSession = async (event, sessionId) => {
     event.stopPropagation();
-    if (!window.confirm('이 대화 기록을 삭제하시겠습니까?')) return;
+    if (!window.confirm('??????疫꿸퀡以???????뤿뻻野껋쥙???뉙돱?')) return;
 
     try {
       await fetchWithAuth(buildApiUrl(`/api/chat/sessions/${sessionId}`), {
@@ -178,7 +179,7 @@ export default function Planner() {
       fetchSessions();
       if (currentSessionId === sessionId) startNewChat();
     } catch (error) {
-      console.error('세션 삭제 실패:', error);
+      console.error('?紐꾨???????쎈솭:', error);
     }
   };
 
@@ -201,7 +202,7 @@ export default function Planner() {
       });
 
       if (!response.ok) {
-        let errorMessage = '채팅 요청에 실패했습니다.';
+        let errorMessage = '筌?쑵???遺욧퍕????쎈솭??됰뮸??덈뼄.';
         try {
           const errorData = await response.json();
           errorMessage = errorData?.message || errorData?.error || errorMessage;
@@ -217,7 +218,7 @@ export default function Planner() {
       const data = await response.json();
       const payload = data?.data ?? data;
       const sessionId = payload?.sessionId;
-      const botMessage = payload?.message || '응답을 생성하지 못했습니다.';
+      const botMessage = payload?.message || '?臾먮뼗????밴쉐??? 筌륁궢六??щ빍??';
       const intent = payload?.intent;
 
       if (!currentSessionId && sessionId) {
@@ -231,11 +232,11 @@ export default function Planner() {
         setTimeout(() => setIsModalOpen(true), 600);
       }
 
-      await fetchQuota(sessionId ?? currentSessionId);
+      await fetchQuota();
     } catch (error) {
-      console.error('메시지 전송 실패:', error);
-      setMessages((prev) => [...prev, { sender: 'bot', text: '서버 연결에 실패했습니다. 잠시 후 다시 시도해 주세요.' }]);
-      await fetchQuota(currentSessionId);
+      console.error('筌롫뗄?놅쭪? ?袁⑸꽊 ??쎈솭:', error);
+      setMessages((prev) => [...prev, { sender: 'bot', text: '??뺤쒔 ?怨뚭퍙????쎈솭??됰뮸??덈뼄. ?醫롫뻻 ????쇰뻻 ??뺣즲??雅뚯눘苑??' }]);
+      await fetchQuota();
     } finally {
       setIsLoading(false);
     }
@@ -243,16 +244,16 @@ export default function Planner() {
 
   const submitPlan = async () => {
     if (!formData.departure || !formData.dest || !formData.startDate || !formData.endDate) {
-      alert('출발지, 목적지, 여행 날짜는 필수입니다.');
+      alert('?곗뮆而삼쭪?, 筌뤴뫗?삼쭪?, ??六??醫롮????袁⑸땾??낅빍??');
       return;
     }
 
-    const finalRequest = `출발지: ${formData.departure}, 목적지: ${formData.dest}, 숙소: ${
-      formData.accommodation || '미정(AI가 동선에 맞춰 1곳 추천)'
-    }, 날짜: ${formData.startDate} ~ ${formData.endDate}, 동행: ${formData.companion}, 스타일: ${formData.style}`;
+    const finalRequest = `?곗뮆而삼쭪?: ${formData.departure}, 筌뤴뫗?삼쭪?: ${formData.dest}, ??덈꺖: ${
+      formData.accommodation || '沃섎챷??AI揶쎛 ??덇퐨??筌띿쉸??1???곕뗄荑?'
+    }, ?醫롮?: ${formData.startDate} ~ ${formData.endDate}, ??됰뻬: ${formData.companion}, ????? ${formData.style}`;
 
     setIsModalOpen(false);
-    setMessages((prev) => [...prev, { sender: 'user', text: '[여행 정보 입력 완료]' }]);
+    setMessages((prev) => [...prev, { sender: 'user', text: '[??六??類ｋ궖 ??낆젾 ?袁⑥┷]' }]);
     setIsLoading(true);
 
     try {
@@ -266,7 +267,7 @@ export default function Planner() {
       });
 
       if (!response.ok) {
-        let errorMessage = '일정 생성에 실패했습니다.';
+        let errorMessage = '??깆젟 ??밴쉐????쎈솭??됰뮸??덈뼄.';
         try {
           const errorData = await response.json();
           errorMessage = errorData?.message || errorData?.error || errorMessage;
@@ -284,27 +285,27 @@ export default function Planner() {
       if (data.success && data.data) {
         setMessages((prev) => [
           ...prev,
-          { sender: 'bot', text: '좋아요. 아래에 여행 초안을 만들었어요. 확인해보세요.' },
+          { sender: 'bot', text: '?ル뿭釉?? ?袁⑥삋????六??λ뜆釉??筌띾슢諭??됰선?? ?類ㅼ뵥????紐꾩뒄.' },
           { sender: 'bot', isPlanCard: true, planData: data.data }
         ]);
         fetchSessions();
       } else {
-        setMessages((prev) => [...prev, { sender: 'bot', text: '일정 생성에 실패했습니다. 다시 시도해 주세요.' }]);
+        setMessages((prev) => [...prev, { sender: 'bot', text: '??깆젟 ??밴쉐????쎈솭??됰뮸??덈뼄. ??쇰뻻 ??뺣즲??雅뚯눘苑??' }]);
       }
     } catch (error) {
-      console.error('일정 생성 실패:', error);
-      setMessages((prev) => [...prev, { sender: 'bot', text: error?.message || '일정 생성 중 서버 오류가 발생했습니다.' }]);
+      console.error('??깆젟 ??밴쉐 ??쎈솭:', error);
+      setMessages((prev) => [...prev, { sender: 'bot', text: error?.message || '??깆젟 ??밴쉐 餓???뺤쒔 ??살첒揶쎛 獄쏆뮇源??됰뮸??덈뼄.' }]);
     } finally {
       setIsLoading(false);
-      await fetchQuota(currentSessionId);
+      await fetchQuota();
     }
   };
 
   const quotaText = isQuotaLoading && !quota
-    ? '남은 횟수 확인 중...'
+    ? '??? ??쏅땾 ?類ㅼ뵥 餓?..'
     : quota
-      ? `일정 ${quota.planPerDayRemaining}/${quota.planPerDayLimit} · 채팅 ${quota.chatPerSessionRemaining}/${quota.chatPerSessionLimit}`
-      : '남은 횟수 -';
+      ? `??깆젟 ${quota.planPerDayRemaining}/${quota.planPerDayLimit} 夷?筌?쑵??${quota.chatPerDayRemaining}/${quota.chatPerDayLimit}`
+      : '??? ??쏅땾 -';
 
   return (
     <div className="relative flex h-[calc(100vh-76px)] overflow-hidden bg-[#eef7ff]">
@@ -317,7 +318,7 @@ export default function Planner() {
       {isMobile && isSidebarOpen && (
         <button
           type="button"
-          aria-label="사이드바 닫기"
+          aria-label="?????뺤뺍 ??る┛"
           onClick={() => setIsSidebarOpen(false)}
           className="absolute inset-0 z-10 bg-black/35"
         />
@@ -338,7 +339,7 @@ export default function Planner() {
             onClick={startNewChat}
             className="flex w-full items-center gap-2 rounded-2xl border border-[#d2e8fb] bg-white p-3 font-bold text-[#305676] shadow-sm transition hover:border-[#1f8ef1] hover:text-[#1f8ef1]"
           >
-            <Plus size={18} /> 새 여행 계획하기
+            <Plus size={18} /> ????六??④쑵???띾┛
           </button>
         </div>
 
@@ -372,7 +373,7 @@ export default function Planner() {
               </div>
             ))
           ) : (
-            <p className="mt-10 text-center text-sm text-[#8aa1b7]">저장된 대화가 없습니다.</p>
+            <p className="mt-10 text-center text-sm text-[#8aa1b7]">???貫留????遺? ??곷뮸??덈뼄.</p>
           )}
         </div>
       </div>
@@ -461,7 +462,7 @@ export default function Planner() {
                   <Loader2 className="animate-spin" size={20} />
                 </div>
                 <div className="rounded-2xl rounded-tl-sm border border-[#d6e9fa] bg-[#f9fdff] p-4 font-medium text-[#4b6177]">
-                  AI가 답변을 생성하는 중입니다...
+                  AI揶쎛 ???????밴쉐??롫뮉 餓λ쵐???덈뼄...
                 </div>
               </div>
             )}
@@ -493,7 +494,7 @@ export default function Planner() {
             </button>
           </div>
           <p className="mt-3 text-center text-xs text-[#8aa1b7]">
-            생성된 일정은 참고용이며, 실제 예약/영업 정보는 별도로 확인해 주세요.
+            ??밴쉐????깆젟?? 筌〓㈇???뱀뵠筌? ??쇱젫 ??됰튋/?怨몃씜 ?類ｋ궖??癰귢쑬猷꾣에??類ㅼ뵥??雅뚯눘苑??
           </p>
         </div>
       </div>
@@ -502,15 +503,15 @@ export default function Planner() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4 backdrop-blur-sm">
           <div className="max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-[2rem] border border-[#d3e8fb] bg-white shadow-2xl duration-200 animate-in fade-in zoom-in">
             <div className="relative overflow-hidden bg-gradient-to-r from-[#1f8ef1] to-[#0ea5e9] p-6 text-center text-white sm:p-8">
-              <h2 className="relative z-10 text-3xl font-black">여행 정보 입력</h2>
-              <p className="relative z-10 mt-2 text-sm font-medium text-white/85">더 정확한 일정 생성을 위해 정보를 입력해 주세요.</p>
+              <h2 className="relative z-10 text-3xl font-black">??六??類ｋ궖 ??낆젾</h2>
+              <p className="relative z-10 mt-2 text-sm font-medium text-white/85">???類μ넇????깆젟 ??밴쉐???袁る퉸 ?類ｋ궖????낆젾??雅뚯눘苑??</p>
             </div>
 
             <div className="space-y-4 bg-[#eef7ff] p-5 sm:p-8">
               <div className="flex flex-col gap-4 sm:flex-row">
                 <div className="flex-1 rounded-2xl border border-[#d2e8fb] bg-white p-2 shadow-sm transition focus-within:ring-2 focus-within:ring-[#dff1ff]">
                   <label className="ml-2 mt-1 flex items-center gap-1.5 text-xs font-bold text-[#4b6177]">
-                    <PlaneTakeoff size={14} /> 출발지
+                    <PlaneTakeoff size={14} /> ?곗뮆而삼쭪?
                   </label>
                   <input
                     type="text"
@@ -522,7 +523,7 @@ export default function Planner() {
                 </div>
                 <div className="flex-1 rounded-2xl border border-[#d2e8fb] bg-white p-2 shadow-sm transition focus-within:ring-2 focus-within:ring-[#dff1ff]">
                   <label className="ml-2 mt-1 flex items-center gap-1.5 text-xs font-bold text-[#4b6177]">
-                    <PlaneLanding size={14} /> 목적지
+                    <PlaneLanding size={14} /> 筌뤴뫗?삼쭪?
                   </label>
                   <input
                     type="text"
@@ -536,7 +537,7 @@ export default function Planner() {
 
               <div className="w-full rounded-2xl border border-[#d2e8fb] bg-white p-2 shadow-sm transition focus-within:ring-2 focus-within:ring-[#dff1ff]">
                 <label className="ml-2 mt-1 flex items-center gap-1.5 text-xs font-bold text-[#4b6177]">
-                  <BedDouble size={14} /> 숙소(선택)
+                  <BedDouble size={14} /> ??덈꺖(?醫뤾문)
                 </label>
                 <input
                   type="text"
@@ -550,8 +551,7 @@ export default function Planner() {
               <div className="flex flex-col gap-4 sm:flex-row">
                 <div className="flex-1 rounded-2xl border border-[#d2e8fb] bg-white p-2 shadow-sm transition focus-within:ring-2 focus-within:ring-[#dff1ff]">
                   <label className="ml-2 mt-1 flex items-center gap-1.5 text-xs font-bold text-[#4b6177]">
-                    <Calendar size={14} /> 시작일
-                  </label>
+                    <Calendar size={14} /> ??뽰삂??                  </label>
                   <input
                     type="date"
                     className="w-full bg-transparent p-2 text-sm font-semibold text-[#1f3550] outline-none"
@@ -561,8 +561,7 @@ export default function Planner() {
                 </div>
                 <div className="flex-1 rounded-2xl border border-[#d2e8fb] bg-white p-2 shadow-sm transition focus-within:ring-2 focus-within:ring-[#dff1ff]">
                   <label className="ml-2 mt-1 flex items-center gap-1.5 text-xs font-bold text-[#4b6177]">
-                    <Calendar size={14} /> 종료일
-                  </label>
+                    <Calendar size={14} /> ?ル굝利??                  </label>
                   <input
                     type="date"
                     className="w-full bg-transparent p-2 text-sm font-semibold text-[#1f3550] outline-none"
@@ -575,7 +574,7 @@ export default function Planner() {
               <div className="flex flex-col gap-4 sm:flex-row">
                 <div className="flex-1 rounded-2xl border border-[#d2e8fb] bg-white p-2 shadow-sm transition focus-within:ring-2 focus-within:ring-[#dff1ff]">
                   <label className="ml-2 mt-1 flex items-center gap-1.5 text-xs font-bold text-[#4b6177]">
-                    <Users size={14} /> 동행
+                    <Users size={14} /> ??됰뻬
                   </label>
                   <select
                     className="w-full cursor-pointer bg-transparent p-2 text-sm font-semibold text-[#1f3550] outline-none"
@@ -590,8 +589,7 @@ export default function Planner() {
                 </div>
                 <div className="flex-[2] rounded-2xl border border-[#d2e8fb] bg-white p-2 shadow-sm transition focus-within:ring-2 focus-within:ring-[#dff1ff]">
                   <label className="ml-2 mt-1 flex items-center gap-1.5 text-xs font-bold text-[#4b6177]">
-                    <Star size={14} /> 여행 스타일
-                  </label>
+                    <Star size={14} /> ??六??????                  </label>
                   <input
                     type="text"
                     className="w-full bg-transparent p-2 text-sm font-semibold text-[#1f3550] outline-none"
@@ -607,13 +605,12 @@ export default function Planner() {
                   onClick={() => setIsModalOpen(false)}
                   className="flex-1 rounded-2xl bg-[#dfefff] py-4 font-bold text-[#4b6177] transition hover:bg-[#d0e7ff]"
                 >
-                  취소
-                </button>
+                  ?띯뫁??                </button>
                 <button
                   onClick={submitPlan}
                   className="flex-[2] rounded-2xl bg-[#1f8ef1] py-4 font-black text-white shadow-lg transition hover:-translate-y-0.5 hover:bg-[#1878cc] hover:shadow-xl"
                 >
-                  AI 일정 생성하기
+                  AI ??깆젟 ??밴쉐??띾┛
                 </button>
               </div>
             </div>

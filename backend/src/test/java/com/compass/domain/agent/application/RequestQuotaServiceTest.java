@@ -32,7 +32,7 @@ class RequestQuotaServiceTest {
     void setUp() {
         requestQuotaService = new RequestQuotaService(travelPlanRepository, chatMessageRepository);
         ReflectionTestUtils.setField(requestQuotaService, "planPerDayLimit", 3);
-        ReflectionTestUtils.setField(requestQuotaService, "chatPerSessionLimit", 10);
+        ReflectionTestUtils.setField(requestQuotaService, "chatPerDayLimit", 10);
     }
 
     @Test
@@ -54,12 +54,13 @@ class RequestQuotaServiceTest {
     }
 
     @Test
-    void assertChatAllowedInSession_shouldThrow429_whenReachedLimit() {
-        when(chatMessageRepository.countBySessionIdAndSenderRole(11L, "USER")).thenReturn(10L);
+    void assertChatAllowedToday_shouldThrow429_whenReachedLimit() {
+        when(chatMessageRepository.countBySessionUserIdAndSenderRoleAndSentAtBetween(any(), any(), any(), any()))
+                .thenReturn(10L);
 
         BusinessException exception = assertThrows(
                 BusinessException.class,
-                () -> requestQuotaService.assertChatAllowedInSession(11L)
+                () -> requestQuotaService.assertChatAllowedToday(11L)
         );
 
         assertEquals(HttpStatus.TOO_MANY_REQUESTS, exception.getHttpStatus());

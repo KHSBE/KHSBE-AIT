@@ -22,8 +22,8 @@ public class RequestQuotaService {
     @Value("${app.quota.plan-per-day:3}")
     private int planPerDayLimit;
 
-    @Value("${app.quota.chat-per-session:10}")
-    private int chatPerSessionLimit;
+    @Value("${app.quota.chat-per-day:10}")
+    private int chatPerDayLimit;
 
     public void assertPlanCreationAllowed(Long userId) {
         long used = getPlanUsedToday(userId);
@@ -37,24 +37,24 @@ public class RequestQuotaService {
         }
     }
 
-    public void assertChatAllowedInSession(Long sessionId) {
-        long used = getChatUsedInSession(sessionId);
+    public void assertChatAllowedToday(Long userId) {
+        long used = getChatUsedToday(userId);
         int chatLimit = getSafeChatLimit();
 
         if (used >= chatLimit) {
             throw new BusinessException(
-                    "이 채팅 세션의 메시지 한도(" + chatLimit + "회)를 초과했습니다.",
+                    "하루 채팅 한도(" + chatLimit + "회)를 초과했습니다.",
                     HttpStatus.TOO_MANY_REQUESTS
             );
         }
     }
 
-    public QuotaStatusResponse getQuotaStatus(Long userId, Long sessionId) {
+    public QuotaStatusResponse getQuotaStatus(Long userId) {
         int planLimit = getSafePlanLimit();
         int chatLimit = getSafeChatLimit();
 
         long planUsed = getPlanUsedToday(userId);
-        long chatUsed = (sessionId == null) ? 0 : getChatUsedInSession(sessionId);
+        long chatUsed = getChatUsedToday(userId);
 
         return new QuotaStatusResponse(
                 planLimit,
@@ -73,8 +73,11 @@ public class RequestQuotaService {
         return travelPlanRepository.countByUserIdAndCreatedAtBetween(userId, start, end);
     }
 
-    private long getChatUsedInSession(Long sessionId) {
-        return chatMessageRepository.countBySessionIdAndSenderRole(sessionId, "USER");
+    private long getChatUsedToday(Long userId) {
+        LocalDate today = LocalDate.now();
+        LocalDateTime start = today.atStartOfDay();
+        LocalDateTime end = today.plusDays(1).atStartOfDay();
+        return chatMessageRepository.countBySessionUserIdAndSenderRoleAndSentAtBetween(userId, "USER", start, end);
     }
 
     private int getSafePlanLimit() {
@@ -82,6 +85,6 @@ public class RequestQuotaService {
     }
 
     private int getSafeChatLimit() {
-        return Math.max(1, chatPerSessionLimit);
+        return Math.max(1, chatPerDayLimit);
     }
 }

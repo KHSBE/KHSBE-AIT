@@ -79,7 +79,7 @@ public class TravelAgentService {
                     .orElseThrow(() -> new BusinessException("해당 채팅 세션을 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
         }
 
-        requestQuotaService.assertChatAllowedInSession(session.getId());
+        requestQuotaService.assertChatAllowedToday(user.getId());
 
         messageRepository.save(ChatMessage.builder()
                 .session(session)

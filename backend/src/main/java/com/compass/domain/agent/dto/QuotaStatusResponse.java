@@ -4,8 +4,8 @@ public record QuotaStatusResponse(
         int planPerDayLimit,
         int planPerDayUsed,
         int planPerDayRemaining,
-        int chatPerSessionLimit,
-        int chatPerSessionUsed,
-        int chatPerSessionRemaining
+        int chatPerDayLimit,
+        int chatPerDayUsed,
+        int chatPerDayRemaining
 ) {
 }
