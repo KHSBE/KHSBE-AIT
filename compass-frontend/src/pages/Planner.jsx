@@ -144,19 +144,24 @@ export default function Planner() {
     setIsLoading(true);
 
     try {
-      const query = `/api/agent/chat?message=${encodeURIComponent(userText)}${
-        currentSessionId ? `&sessionId=${currentSessionId}` : ''
-      }`;
-      const response = await fetchWithAuth(buildApiUrl(query), { method: 'GET', headers: getHeaders() });
+      const response = await fetchWithAuth(buildApiUrl('/api/agent/chat'), {
+        method: 'POST',
+        headers: getHeaders(true),
+        body: JSON.stringify({
+          message: userText,
+          sessionId: currentSessionId
+        })
+      });
 
       if (!response.ok) {
         throw new Error('채팅 요청 실패');
       }
 
       const data = await response.json();
-      const sessionId = data.sessionId || data?.data?.sessionId;
-      const botMessage = data.message || data?.data?.message || '응답을 생성하지 못했습니다.';
-      const intent = data.intent || data?.data?.intent;
+      const payload = data?.data ?? data;
+      const sessionId = payload?.sessionId;
+      const botMessage = payload?.message || '응답을 생성하지 못했습니다.';
+      const intent = payload?.intent;
 
       if (!currentSessionId && sessionId) {
         setCurrentSessionId(sessionId);
@@ -194,7 +199,10 @@ export default function Planner() {
       const response = await fetchWithAuth(buildApiUrl('/api/agent/plan'), {
         method: 'POST',
         headers: getHeaders(true),
-        body: JSON.stringify({ request: finalRequest })
+        body: JSON.stringify({
+          request: finalRequest,
+          sessionId: currentSessionId
+        })
       });
 
       const data = await response.json();
@@ -328,10 +336,12 @@ export default function Planner() {
                         )}
                       </div>
 
-                      {msg.planData.itineraries?.map((day) => (
-                        <div key={day.dayNumber} className="rounded-xl border border-[#cfe4f7] bg-white p-4 shadow-sm">
+                      {msg.planData.itineraries?.map((day, dayIndex) => {
+                        const dayValue = day.dayNumber ?? day.day ?? dayIndex + 1;
+                        return (
+                        <div key={day.id ?? dayValue} className="rounded-xl border border-[#cfe4f7] bg-white p-4 shadow-sm">
                           <h4 className="mb-2 flex items-center gap-2 font-bold text-[#1f3550]">
-                            <span className="rounded bg-[#eaf6ff] px-2 py-0.5 text-sm text-[#1f8ef1]">Day {day.dayNumber}</span>
+                            <span className="rounded bg-[#eaf6ff] px-2 py-0.5 text-sm text-[#1f8ef1]">Day {dayValue}</span>
                             {day.theme}
                           </h4>
                           <ul className="mt-3 space-y-3">
@@ -351,7 +361,7 @@ export default function Planner() {
                             ))}
                           </ul>
                         </div>
-                      ))}
+                      )})}
                     </div>
                   )}
                 </div>
