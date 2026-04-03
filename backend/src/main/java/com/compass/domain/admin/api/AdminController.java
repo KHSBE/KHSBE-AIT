@@ -110,7 +110,7 @@ public class AdminController {
         adminAuthorizationService.assertAdmin(authentication);
         getUser(userId);
 
-        requestQuotaService.clearUserQuotaLimit(userId);
+        requestQuotaService.resetQuotaToDefaultAndRefillToday(userId);
         return getUserQuota(userId, authentication);
     }
 

@@ -1,7 +1,9 @@
 package com.compass.domain.agent.application;
 
 import com.compass.domain.agent.dao.ChatMessageRepository;
+import com.compass.domain.agent.dao.UserQuotaDailyResetRepository;
 import com.compass.domain.agent.dao.UserQuotaSettingRepository;
+import com.compass.domain.agent.domain.UserQuotaDailyReset;
 import com.compass.domain.agent.domain.UserQuotaSetting;
 import com.compass.domain.agent.dto.QuotaStatusResponse;
 import com.compass.domain.plan.dao.TravelPlanRepository;
@@ -22,6 +24,7 @@ public class RequestQuotaService {
     private final TravelPlanRepository travelPlanRepository;
     private final ChatMessageRepository chatMessageRepository;
     private final UserQuotaSettingRepository userQuotaSettingRepository;
+    private final UserQuotaDailyResetRepository userQuotaDailyResetRepository;
 
     @Value("${app.quota.plan-per-day:3}")
     private int planPerDayLimit;
@@ -62,7 +65,10 @@ public class RequestQuotaService {
     }
 
     public QuotaAdminDetail getQuotaAdminDetail(Long userId) {
+        LocalDate today = LocalDate.now();
+
         UserQuotaSetting setting = userQuotaSettingRepository.findByUserId(userId).orElse(null);
+        UserQuotaDailyReset dailyReset = userQuotaDailyResetRepository.findByUserIdAndQuotaDate(userId, today).orElse(null);
 
         int defaultPlanLimit = getDefaultPlanLimit();
         int defaultChatLimit = getDefaultChatLimit();
@@ -72,8 +78,14 @@ public class RequestQuotaService {
         int effectivePlanLimit = overridePlanLimit != null ? overridePlanLimit : defaultPlanLimit;
         int effectiveChatLimit = overrideChatLimit != null ? overrideChatLimit : defaultChatLimit;
 
-        int planUsed = (int) getPlanUsedToday(userId);
-        int chatUsed = (int) getChatUsedToday(userId);
+        int rawPlanUsed = (int) getPlanUsedByDate(userId, today);
+        int rawChatUsed = (int) getChatUsedByDate(userId, today);
+
+        int planBaseline = dailyReset != null ? safeBaseline(dailyReset.getPlanUsedBaseline()) : 0;
+        int chatBaseline = dailyReset != null ? safeBaseline(dailyReset.getChatUsedBaseline()) : 0;
+
+        int adjustedPlanUsed = Math.max(0, rawPlanUsed - planBaseline);
+        int adjustedChatUsed = Math.max(0, rawChatUsed - chatBaseline);
 
         return new QuotaAdminDetail(
                 defaultPlanLimit,
@@ -82,10 +94,10 @@ public class RequestQuotaService {
                 overrideChatLimit,
                 effectivePlanLimit,
                 effectiveChatLimit,
-                planUsed,
-                Math.max(0, effectivePlanLimit - planUsed),
-                chatUsed,
-                Math.max(0, effectiveChatLimit - chatUsed)
+                adjustedPlanUsed,
+                Math.max(0, effectivePlanLimit - adjustedPlanUsed),
+                adjustedChatUsed,
+                Math.max(0, effectiveChatLimit - adjustedChatUsed)
         );
     }
 
@@ -110,6 +122,26 @@ public class RequestQuotaService {
         userQuotaSettingRepository.deleteAllByUserId(userId);
     }
 
+    @Transactional
+    public void resetQuotaToDefaultAndRefillToday(Long userId) {
+        clearUserQuotaLimit(userId);
+
+        LocalDate today = LocalDate.now();
+        int rawPlanUsed = (int) getPlanUsedByDate(userId, today);
+        int rawChatUsed = (int) getChatUsedByDate(userId, today);
+
+        UserQuotaDailyReset reset = userQuotaDailyResetRepository.findByUserIdAndQuotaDate(userId, today)
+                .orElseGet(() -> UserQuotaDailyReset.builder()
+                        .userId(userId)
+                        .quotaDate(today)
+                        .planUsedBaseline(0)
+                        .chatUsedBaseline(0)
+                        .build());
+
+        reset.updateBaselines(rawPlanUsed, rawChatUsed);
+        userQuotaDailyResetRepository.save(reset);
+    }
+
     private int getDefaultPlanLimit() {
         return Math.max(1, planPerDayLimit);
     }
@@ -128,17 +160,19 @@ public class RequestQuotaService {
         return value;
     }
 
-    private long getPlanUsedToday(Long userId) {
-        LocalDate today = LocalDate.now();
-        LocalDateTime start = today.atStartOfDay();
-        LocalDateTime end = today.plusDays(1).atStartOfDay();
+    private int safeBaseline(Integer baseline) {
+        return baseline == null ? 0 : Math.max(0, baseline);
+    }
+
+    private long getPlanUsedByDate(Long userId, LocalDate date) {
+        LocalDateTime start = date.atStartOfDay();
+        LocalDateTime end = date.plusDays(1).atStartOfDay();
         return travelPlanRepository.countByUserIdAndCreatedAtBetween(userId, start, end);
     }
 
-    private long getChatUsedToday(Long userId) {
-        LocalDate today = LocalDate.now();
-        LocalDateTime start = today.atStartOfDay();
-        LocalDateTime end = today.plusDays(1).atStartOfDay();
+    private long getChatUsedByDate(Long userId, LocalDate date) {
+        LocalDateTime start = date.atStartOfDay();
+        LocalDateTime end = date.plusDays(1).atStartOfDay();
         return chatMessageRepository.countBySessionUserIdAndSenderRoleAndSentAtBetween(userId, "USER", start, end);
     }
 
