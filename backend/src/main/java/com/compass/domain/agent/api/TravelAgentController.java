@@ -10,6 +10,8 @@ import com.compass.domain.agent.domain.ChatSession;
 import com.compass.domain.agent.dto.AiPlanResponse;
 import com.compass.domain.agent.dto.PlanRequest;
 import com.compass.domain.plan.application.PlanCommandService;
+import com.compass.domain.plan.dao.TravelPlanRepository;
+import com.compass.domain.plan.domain.Itinerary;
 import com.compass.domain.user.dao.UserRepository;
 import com.compass.global.common.ApiResponse;
 import com.compass.global.error.BusinessException;
@@ -20,6 +22,10 @@ import org.springframework.security.core.Authentication;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
+
 @RestController
 @RequestMapping("/api/agent")
 @RequiredArgsConstructor
@@ -29,6 +35,7 @@ public class TravelAgentController {
     private final PlacesVerificationService placesVerificationService;
     private final RequestQuotaService requestQuotaService;
     private final PlanCommandService planService;
+    private final TravelPlanRepository planRepository;
     private final UserRepository userRepository;
     private final ChatSessionRepository sessionRepository;
     private final ChatMessageRepository messageRepository;
@@ -67,7 +74,39 @@ public class TravelAgentController {
                 .content("요청하신 일정 초안 생성을 완료했습니다.")
                 .build());
 
-        planService.savePlanFromAi(user, verifiedPlan);
-        return ApiResponse.success(verifiedPlan);
+        Long savedPlanId = planService.savePlanFromAi(user, verifiedPlan);
+
+        var savedPlan = planRepository.findByIdAndUserIdWithDetails(savedPlanId, user.getId())
+                .orElseThrow(() -> new BusinessException("Saved plan not found.", HttpStatus.NOT_FOUND));
+
+        Map<Integer, Itinerary> itineraryByDay = savedPlan.getItineraries().stream()
+                .collect(Collectors.toMap(Itinerary::getDayNumber, Function.identity(), (left, right) -> left));
+
+        var enrichedDays = verifiedPlan.itineraries() == null
+                ? null
+                : verifiedPlan.itineraries().stream()
+                    .map(day -> {
+                        Itinerary savedItinerary = itineraryByDay.get(day.day());
+                        Long itineraryId = savedItinerary != null ? savedItinerary.getId() : day.itineraryId();
+                        return new AiPlanResponse.DayItinerary(
+                                itineraryId,
+                                day.day(),
+                                day.theme(),
+                                day.places()
+                        );
+                    })
+                    .toList();
+
+        AiPlanResponse enrichedPlan = new AiPlanResponse(
+                savedPlanId,
+                verifiedPlan.title(),
+                verifiedPlan.region(),
+                verifiedPlan.accommodation(),
+                verifiedPlan.startDate(),
+                verifiedPlan.endDate(),
+                enrichedDays
+        );
+
+        return ApiResponse.success(enrichedPlan);
     }
 }

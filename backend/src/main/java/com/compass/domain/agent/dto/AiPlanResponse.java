@@ -3,6 +3,7 @@ package com.compass.domain.agent.dto;
 import java.util.List;
 
 public record AiPlanResponse(
+        Long planId,
         String title,
         String region,
         String accommodation,
@@ -10,11 +11,26 @@ public record AiPlanResponse(
         String endDate,
         List<DayItinerary> itineraries
 ) {
+    public AiPlanResponse(
+            String title,
+            String region,
+            String accommodation,
+            String startDate,
+            String endDate,
+            List<DayItinerary> itineraries
+    ) {
+        this(null, title, region, accommodation, startDate, endDate, itineraries);
+    }
+
     public record DayItinerary(
+            Long itineraryId,
             int day,
             String theme,
             List<PlaceDetail> places
     ) {
+        public DayItinerary(int day, String theme, List<PlaceDetail> places) {
+            this(null, day, theme, places);
+        }
     }
 
     public record PlaceDetail(

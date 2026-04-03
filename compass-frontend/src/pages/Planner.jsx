@@ -34,6 +34,7 @@ export default function Planner() {
   const [toast, setToast] = useState({ visible: false, message: '' });
   const [quota, setQuota] = useState(null);
   const [isQuotaLoading, setIsQuotaLoading] = useState(false);
+  const [savingCandidateKey, setSavingCandidateKey] = useState(null);
   const [formData, setFormData] = useState({
     departure: '',
     dest: '',
@@ -303,41 +304,92 @@ export default function Planner() {
     }
   };
 
-  const applyCandidateToPlanCard = (messageIndex, dayIndex, placeIndex, candidate) => {
-    setMessages((prev) =>
-      prev.map((msg, idx) => {
-        if (idx !== messageIndex || !msg?.isPlanCard || !msg?.planData) return msg;
+  const applyCandidateToPlanCard = async (messageIndex, dayIndex, placeIndex, candidate) => {
+    const targetMessage = messages[messageIndex];
+    const planData = targetMessage?.planData;
+    const targetDay = planData?.itineraries?.[dayIndex];
+    const currentPlaces = targetDay?.places || [];
+    const planId = planData?.planId;
+    const itineraryId = targetDay?.itineraryId;
 
-        const nextItineraries = (msg.planData.itineraries || []).map((day, dIdx) => {
-          if (dIdx !== dayIndex) return day;
+    if (!planId || !itineraryId || !currentPlaces.length) {
+      showQuotaToast('저장 대상 일정 정보가 없어 후보 적용을 완료할 수 없습니다.');
+      return;
+    }
 
-          const nextPlaces = (day.places || []).map((place, pIdx) => {
-            if (pIdx !== placeIndex) return place;
-            return {
-              ...place,
-              name: candidate.name || place.name,
-              googlePlaceId: candidate.googlePlaceId || place.googlePlaceId,
-              lat: candidate.lat ?? place.lat,
-              lng: candidate.lng ?? place.lng,
-              confidence: candidate.confidence ?? place.confidence ?? 1,
-              matchedBy: 'USER_SELECTED_TOP3',
-              verificationUncertain: false,
-              candidates: place.candidates || []
-            };
-          });
+    const actionKey = `${messageIndex}-${dayIndex}-${placeIndex}`;
+    setSavingCandidateKey(actionKey);
 
-          return { ...day, places: nextPlaces };
-        });
+    const updatedPlaces = currentPlaces.map((place, pIdx) => {
+      if (pIdx !== placeIndex) return place;
+      const nextName = candidate.name || place.placeName || place.name;
+      const nextLat = candidate.lat ?? candidate.latitude ?? place.lat ?? place.latitude ?? 0;
+      const nextLng = candidate.lng ?? candidate.longitude ?? place.lng ?? place.longitude ?? 0;
+      return {
+        ...place,
+        name: nextName,
+        placeName: nextName,
+        googlePlaceId: candidate.googlePlaceId || place.googlePlaceId,
+        lat: nextLat,
+        lng: nextLng,
+        latitude: nextLat,
+        longitude: nextLng,
+        confidence: candidate.confidence ?? place.confidence ?? 1,
+        matchedBy: 'USER_SELECTED_TOP3',
+        verificationUncertain: false,
+        candidates: place.candidates || []
+      };
+    });
 
-        return {
-          ...msg,
-          planData: {
-            ...msg.planData,
-            itineraries: nextItineraries
-          }
-        };
-      })
-    );
+    const payloadPlaces = updatedPlaces.map((place) => ({
+      placeName: (place.placeName || place.name || '').trim(),
+      googlePlaceId: place.googlePlaceId || null,
+      latitude: place.latitude ?? place.lat ?? 0,
+      longitude: place.longitude ?? place.lng ?? 0,
+      memo: place.memo || ''
+    }));
+
+    try {
+      const response = await fetchWithAuth(buildApiUrl(`/api/plans/${planId}/itineraries/${itineraryId}/places`), {
+        method: 'PUT',
+        headers: getHeaders(true),
+        body: JSON.stringify({ places: payloadPlaces })
+      });
+
+      if (!response.ok) {
+        let errorMessage = '후보 저장에 실패했습니다.';
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData?.message || errorData?.error || errorMessage;
+        } catch {
+          // ignore parse error
+        }
+        throw new Error(errorMessage);
+      }
+
+      setMessages((prev) =>
+        prev.map((msg, idx) => {
+          if (idx !== messageIndex || !msg?.isPlanCard || !msg?.planData) return msg;
+
+          const nextItineraries = (msg.planData.itineraries || []).map((day, dIdx) =>
+            dIdx === dayIndex ? { ...day, places: updatedPlaces } : day
+          );
+
+          return {
+            ...msg,
+            planData: {
+              ...msg.planData,
+              itineraries: nextItineraries
+            }
+          };
+        })
+      );
+    } catch (error) {
+      console.error('Top3 후보 저장 실패:', error);
+      showQuotaToast(error?.message || '후보 저장 중 오류가 발생했습니다.');
+    } finally {
+      setSavingCandidateKey(null);
+    }
   };
 
   const quotaText = isQuotaLoading && !quota
@@ -495,6 +547,7 @@ export default function Planner() {
                                               key={`${candidate.googlePlaceId || candidate.name}-${candidateIndex}`}
                                               type="button"
                                               onClick={() => applyCandidateToPlanCard(index, dayIndex, placeIndex, candidate)}
+                                              disabled={savingCandidateKey === `${index}-${dayIndex}-${placeIndex}`}
                                               className="rounded-md border border-[#d7e9fa] bg-[#f4faff] px-2 py-1 text-[10px] font-bold text-[#2e678d] transition hover:border-[#1f8ef1] hover:text-[#1f8ef1]"
                                             >
                                               {candidate.name}
