@@ -1,6 +1,8 @@
 package com.compass.domain.agent.application;
 
 import com.compass.domain.agent.dao.ChatMessageRepository;
+import com.compass.domain.agent.dao.UserQuotaSettingRepository;
+import com.compass.domain.agent.domain.UserQuotaSetting;
 import com.compass.domain.agent.dto.QuotaStatusResponse;
 import com.compass.domain.plan.dao.TravelPlanRepository;
 import com.compass.global.error.BusinessException;
@@ -18,6 +20,7 @@ public class RequestQuotaService {
 
     private final TravelPlanRepository travelPlanRepository;
     private final ChatMessageRepository chatMessageRepository;
+    private final UserQuotaSettingRepository userQuotaSettingRepository;
 
     @Value("${app.quota.plan-per-day:3}")
     private int planPerDayLimit;
@@ -26,44 +29,100 @@ public class RequestQuotaService {
     private int chatPerDayLimit;
 
     public void assertPlanCreationAllowed(Long userId) {
-        long used = getPlanUsedToday(userId);
-        int planLimit = getSafePlanLimit();
-
-        if (used >= planLimit) {
+        QuotaAdminDetail detail = getQuotaAdminDetail(userId);
+        if (detail.planPerDayUsed() >= detail.effectivePlanPerDayLimit()) {
             throw new BusinessException(
-                    "하루 일정 생성 한도(" + planLimit + "회)를 초과했습니다.",
+                    "하루 일정 생성 한도(" + detail.effectivePlanPerDayLimit() + "회)를 초과했습니다.",
                     HttpStatus.TOO_MANY_REQUESTS
             );
         }
     }
 
     public void assertChatAllowedToday(Long userId) {
-        long used = getChatUsedToday(userId);
-        int chatLimit = getSafeChatLimit();
-
-        if (used >= chatLimit) {
+        QuotaAdminDetail detail = getQuotaAdminDetail(userId);
+        if (detail.chatPerDayUsed() >= detail.effectiveChatPerDayLimit()) {
             throw new BusinessException(
-                    "하루 채팅 한도(" + chatLimit + "회)를 초과했습니다.",
+                    "하루 채팅 한도(" + detail.effectiveChatPerDayLimit() + "회)를 초과했습니다.",
                     HttpStatus.TOO_MANY_REQUESTS
             );
         }
     }
 
     public QuotaStatusResponse getQuotaStatus(Long userId) {
-        int planLimit = getSafePlanLimit();
-        int chatLimit = getSafeChatLimit();
-
-        long planUsed = getPlanUsedToday(userId);
-        long chatUsed = getChatUsedToday(userId);
-
+        QuotaAdminDetail detail = getQuotaAdminDetail(userId);
         return new QuotaStatusResponse(
-                planLimit,
-                (int) planUsed,
-                Math.max(0, planLimit - (int) planUsed),
-                chatLimit,
-                (int) chatUsed,
-                Math.max(0, chatLimit - (int) chatUsed)
+                detail.effectivePlanPerDayLimit(),
+                detail.planPerDayUsed(),
+                detail.planPerDayRemaining(),
+                detail.effectiveChatPerDayLimit(),
+                detail.chatPerDayUsed(),
+                detail.chatPerDayRemaining()
         );
+    }
+
+    public QuotaAdminDetail getQuotaAdminDetail(Long userId) {
+        UserQuotaSetting setting = userQuotaSettingRepository.findByUserId(userId).orElse(null);
+
+        int defaultPlanLimit = getDefaultPlanLimit();
+        int defaultChatLimit = getDefaultChatLimit();
+        Integer overridePlanLimit = setting != null ? normalizeOverride(setting.getPlanPerDayLimit()) : null;
+        Integer overrideChatLimit = setting != null ? normalizeOverride(setting.getChatPerDayLimit()) : null;
+
+        int effectivePlanLimit = overridePlanLimit != null ? overridePlanLimit : defaultPlanLimit;
+        int effectiveChatLimit = overrideChatLimit != null ? overrideChatLimit : defaultChatLimit;
+
+        int planUsed = (int) getPlanUsedToday(userId);
+        int chatUsed = (int) getChatUsedToday(userId);
+
+        return new QuotaAdminDetail(
+                defaultPlanLimit,
+                defaultChatLimit,
+                overridePlanLimit,
+                overrideChatLimit,
+                effectivePlanLimit,
+                effectiveChatLimit,
+                planUsed,
+                Math.max(0, effectivePlanLimit - planUsed),
+                chatUsed,
+                Math.max(0, effectiveChatLimit - chatUsed)
+        );
+    }
+
+    public void upsertUserQuotaLimit(Long userId, Integer planPerDayLimit, Integer chatPerDayLimit) {
+        Integer normalizedPlan = normalizeOverride(planPerDayLimit);
+        Integer normalizedChat = normalizeOverride(chatPerDayLimit);
+
+        if (normalizedPlan == null && normalizedChat == null) {
+            throw new BusinessException("사용자 쿼터 값이 비어 있습니다.", HttpStatus.BAD_REQUEST);
+        }
+
+        UserQuotaSetting setting = userQuotaSettingRepository.findByUserId(userId)
+                .orElseGet(() -> UserQuotaSetting.builder().userId(userId).build());
+
+        setting.update(normalizedPlan, normalizedChat);
+        userQuotaSettingRepository.save(setting);
+    }
+
+    public void clearUserQuotaLimit(Long userId) {
+        userQuotaSettingRepository.deleteByUserId(userId);
+    }
+
+    private int getDefaultPlanLimit() {
+        return Math.max(1, planPerDayLimit);
+    }
+
+    private int getDefaultChatLimit() {
+        return Math.max(1, chatPerDayLimit);
+    }
+
+    private Integer normalizeOverride(Integer value) {
+        if (value == null) {
+            return null;
+        }
+        if (value < 1) {
+            throw new BusinessException("쿼터 값은 1 이상이어야 합니다.", HttpStatus.BAD_REQUEST);
+        }
+        return value;
     }
 
     private long getPlanUsedToday(Long userId) {
@@ -80,11 +139,17 @@ public class RequestQuotaService {
         return chatMessageRepository.countBySessionUserIdAndSenderRoleAndSentAtBetween(userId, "USER", start, end);
     }
 
-    private int getSafePlanLimit() {
-        return Math.max(1, planPerDayLimit);
-    }
-
-    private int getSafeChatLimit() {
-        return Math.max(1, chatPerDayLimit);
+    public record QuotaAdminDetail(
+            int defaultPlanPerDayLimit,
+            int defaultChatPerDayLimit,
+            Integer overridePlanPerDayLimit,
+            Integer overrideChatPerDayLimit,
+            int effectivePlanPerDayLimit,
+            int effectiveChatPerDayLimit,
+            int planPerDayUsed,
+            int planPerDayRemaining,
+            int chatPerDayUsed,
+            int chatPerDayRemaining
+    ) {
     }
 }

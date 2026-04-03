@@ -1,5 +1,6 @@
+import { useEffect, useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, Link, useNavigate, Navigate } from 'react-router-dom';
-import { LayoutDashboard, UserRound, LogOut } from 'lucide-react';
+import { LayoutDashboard, UserRound, LogOut, ShieldCheck } from 'lucide-react';
 import Home from './pages/Home';
 import Planner from './pages/Planner';
 import Login from './pages/Login';
@@ -7,6 +8,8 @@ import Signup from './pages/Signup';
 import OAuth2Redirect from './pages/OAuth2Redirect';
 import MyPage from './pages/MyPage';
 import PlanDetail from './pages/PlanDetail';
+import Admin from './pages/Admin';
+import { buildApiUrl, fetchWithAuth } from './utils/api';
 
 function ProtectedRoute({ children }) {
   const token = localStorage.getItem('accessToken');
@@ -22,6 +25,30 @@ function ProtectedRoute({ children }) {
 function Navigation() {
   const navigate = useNavigate();
   const isLoggedIn = !!localStorage.getItem('accessToken');
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  useEffect(() => {
+    const checkAdmin = async () => {
+      if (!isLoggedIn) {
+        setIsAdmin(false);
+        return;
+      }
+
+      try {
+        const response = await fetchWithAuth(buildApiUrl('/api/admin/me'));
+        if (!response.ok) {
+          setIsAdmin(false);
+          return;
+        }
+        const data = await response.json();
+        setIsAdmin(!!data?.data?.admin);
+      } catch {
+        setIsAdmin(false);
+      }
+    };
+
+    checkAdmin();
+  }, [isLoggedIn]);
 
   const handleLogout = () => {
     localStorage.removeItem('accessToken');
@@ -53,6 +80,15 @@ function Navigation() {
             <LayoutDashboard size={17} />
           </Link>
 
+          {isLoggedIn && isAdmin && (
+            <Link
+              to="/admin"
+              className="hidden rounded-full px-4 py-2 text-[#4b6177] transition hover:bg-[#e2f1ff] hover:text-[#1f8ef1] sm:inline-flex"
+            >
+              관리자
+            </Link>
+          )}
+
           {isLoggedIn ? (
             <>
               <Link
@@ -68,6 +104,15 @@ function Navigation() {
               >
                 <UserRound size={17} />
               </Link>
+              {isAdmin && (
+                <Link
+                  to="/admin"
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-[#d1e5f8] bg-[#f3f9ff] text-[#4b6177] transition hover:border-[#1f8ef1] hover:text-[#1f8ef1] sm:hidden"
+                  aria-label="관리자"
+                >
+                  <ShieldCheck size={17} />
+                </Link>
+              )}
               <button
                 onClick={handleLogout}
                 className="ml-1 inline-flex items-center gap-1 rounded-full border border-[#d1e5f8] bg-[#f3f9ff] px-3 py-2 text-[#3c5874] transition hover:border-[#0ea5e9] hover:text-[#0b78ac] sm:px-4"
@@ -122,6 +167,14 @@ function App() {
               element={(
                 <ProtectedRoute>
                   <PlanDetail />
+                </ProtectedRoute>
+              )}
+            />
+            <Route
+              path="/admin"
+              element={(
+                <ProtectedRoute>
+                  <Admin />
                 </ProtectedRoute>
               )}
             />
