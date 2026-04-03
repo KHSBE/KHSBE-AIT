@@ -1,4 +1,4 @@
-﻿import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import {
   Send,
   Bot,
@@ -32,6 +32,8 @@ export default function Planner() {
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [toast, setToast] = useState({ visible: false, message: '' });
+  const [quota, setQuota] = useState(null);
+  const [isQuotaLoading, setIsQuotaLoading] = useState(false);
   const [formData, setFormData] = useState({
     departure: '',
     dest: '',
@@ -84,7 +86,7 @@ export default function Planner() {
     return headers;
   };
 
-  const fetchSessions = async () => {
+  const fetchSessions = useCallback(async () => {
     try {
       const response = await fetchWithAuth(buildApiUrl('/api/chat/sessions'), { headers: getHeaders() });
       const data = await response.json();
@@ -95,11 +97,40 @@ export default function Planner() {
     } catch (error) {
       console.error('세션 목록 로딩 실패:', error);
     }
-  };
+  }, []);
+
+  const fetchQuota = useCallback(async (sessionId) => {
+    setIsQuotaLoading(true);
+    try {
+      const query = sessionId ? `?sessionId=${sessionId}` : '';
+      const response = await fetchWithAuth(buildApiUrl(`/api/agent/quota${query}`), {
+        headers: getHeaders()
+      });
+
+      if (!response.ok) {
+        throw new Error('쿼터 조회 실패');
+      }
+
+      const data = await response.json();
+      if (data?.success) {
+        setQuota(data.data);
+      }
+    } catch (error) {
+      console.error('쿼터 조회 실패:', error);
+      setQuota(null);
+    } finally {
+      setIsQuotaLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     fetchSessions();
-  }, []);
+    fetchQuota(null);
+  }, [fetchQuota, fetchSessions]);
+
+  useEffect(() => {
+    fetchQuota(currentSessionId);
+  }, [currentSessionId, fetchQuota]);
 
   const loadSession = async (sessionId) => {
     setCurrentSessionId(sessionId);
@@ -199,9 +230,12 @@ export default function Planner() {
       if (intent === 'PLAN_CREATION') {
         setTimeout(() => setIsModalOpen(true), 600);
       }
+
+      await fetchQuota(sessionId ?? currentSessionId);
     } catch (error) {
       console.error('메시지 전송 실패:', error);
       setMessages((prev) => [...prev, { sender: 'bot', text: '서버 연결에 실패했습니다. 잠시 후 다시 시도해 주세요.' }]);
+      await fetchQuota(currentSessionId);
     } finally {
       setIsLoading(false);
     }
@@ -262,8 +296,15 @@ export default function Planner() {
       setMessages((prev) => [...prev, { sender: 'bot', text: error?.message || '일정 생성 중 서버 오류가 발생했습니다.' }]);
     } finally {
       setIsLoading(false);
+      await fetchQuota(currentSessionId);
     }
   };
+
+  const quotaText = isQuotaLoading && !quota
+    ? '남은 횟수 확인 중...'
+    : quota
+      ? `일정 ${quota.planPerDayRemaining}/${quota.planPerDayLimit} · 채팅 ${quota.chatPerSessionRemaining}/${quota.chatPerSessionLimit}`
+      : '남은 횟수 -';
 
   return (
     <div className="relative flex h-[calc(100vh-76px)] overflow-hidden bg-[#eef7ff]">
@@ -430,6 +471,11 @@ export default function Planner() {
 
         <div className="border-t border-[#d6e9fa] bg-[#f9fdff] p-4">
           <div className="relative mx-auto flex max-w-3xl gap-2 rounded-full border border-[#d2e8fb] bg-white shadow-sm transition-all focus-within:border-[#1f8ef1] focus-within:ring-2 focus-within:ring-[#dff1ff]">
+            <div className="ml-3 flex shrink-0 items-center">
+              <span className="rounded-full border border-[#d9ebfb] bg-[#f3f9ff] px-3 py-1 text-[11px] font-bold text-[#3d6f95]">
+                {quotaText}
+              </span>
+            </div>
             <input
               type="text"
               value={inputMessage}
