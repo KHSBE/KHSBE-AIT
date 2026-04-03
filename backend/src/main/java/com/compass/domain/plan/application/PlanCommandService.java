@@ -1,9 +1,11 @@
 package com.compass.domain.plan.application;
 
-import com.compass.domain.plan.dao.TravelPlanRepository;
-import com.compass.domain.plan.dao.PlaceRepository;
-import com.compass.domain.plan.domain.*;
 import com.compass.domain.agent.dto.AiPlanResponse;
+import com.compass.domain.plan.dao.PlaceRepository;
+import com.compass.domain.plan.dao.TravelPlanRepository;
+import com.compass.domain.plan.domain.Itinerary;
+import com.compass.domain.plan.domain.Place;
+import com.compass.domain.plan.domain.TravelPlan;
 import com.compass.domain.plan.dto.UpdateItineraryPlacesRequest;
 import com.compass.domain.user.domain.User;
 import com.compass.global.error.BusinessException;
@@ -16,7 +18,6 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDate;
 import java.util.Objects;
 
-// 여행 계획 저장 서비스
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -26,12 +27,13 @@ public class PlanCommandService {
     private final TravelPlanRepository planRepository;
     private final PlaceRepository placeRepository;
 
-    // ★ 파라미터를 String에서 AiPlanResponse 객체로 바로 받습니다! (ObjectMapper 삭제)
     public Long savePlanFromAi(User user, AiPlanResponse res) {
         try {
-            // 필수 필드 체크 (NullPointerException 방지)
+            if (res == null) {
+                throw new IllegalArgumentException("AI response is null");
+            }
             if (res.startDate() == null || res.endDate() == null) {
-                throw new IllegalArgumentException("AI 응답에 날짜 정보가 누락되었습니다.");
+                throw new IllegalArgumentException("AI response does not contain valid dates");
             }
 
             var plan = TravelPlan.builder()
@@ -46,9 +48,15 @@ public class PlanCommandService {
             mapItineraries(plan, res);
             var savedPlan = planRepository.save(plan);
             return savedPlan.getId();
+        } catch (BusinessException e) {
+            throw e;
         } catch (Exception e) {
-            log.error("일정 저장 에러 발생. 객체 데이터: {}", res, e);
-            throw new RuntimeException("일정 저장 중 오류가 발생했습니다: " + e.getMessage());
+            log.error("[PLAN-SAVE] failed to save AI plan. userId={}, title={}, message={}",
+                    user != null ? user.getId() : null,
+                    res != null ? res.title() : null,
+                    e.getMessage(),
+                    e);
+            throw new BusinessException("AI 일정 저장에 실패했습니다. 잠시 후 다시 시도해 주세요.", HttpStatus.BAD_GATEWAY);
         }
     }
 
@@ -82,9 +90,10 @@ public class PlanCommandService {
         return plan;
     }
 
-    // ★ 회원님이 기존에 완벽하게 짜두신 매핑 로직 그대로 사용!
     private void mapItineraries(TravelPlan plan, AiPlanResponse res) {
-        if (res.itineraries() == null) return;
+        if (res.itineraries() == null) {
+            return;
+        }
 
         for (var day : res.itineraries()) {
             var itinerary = Itinerary.builder()

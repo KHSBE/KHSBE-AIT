@@ -33,6 +33,7 @@ public class TravelAgentService {
     private final ChatMessageRepository messageRepository;
     private final String generalModelName;
     private final String planModelName;
+    private final String planFallbackModelName;
 
     public TravelAgentService(
             @Qualifier("generalChatClient") ChatClient generalChatClient,
@@ -42,7 +43,8 @@ public class TravelAgentService {
             ChatSessionRepository sessionRepository,
             ChatMessageRepository messageRepository,
             @Value("${app.ai.model.general:gemini-3.1-flash-lite-preview}") String generalModelName,
-            @Value("${app.ai.model.plan:gemini-3.1-pro-preview}") String planModelName
+            @Value("${app.ai.model.plan:gemini-3.1-pro-preview}") String planModelName,
+            @Value("${app.ai.model.plan-fallback:gemini-3.1-flash-lite-preview}") String planFallbackModelName
     ) {
         this.generalChatClient = generalChatClient;
         this.planChatClient = planChatClient;
@@ -52,8 +54,10 @@ public class TravelAgentService {
         this.messageRepository = messageRepository;
         this.generalModelName = generalModelName;
         this.planModelName = planModelName;
+        this.planFallbackModelName = planFallbackModelName;
 
-        log.info("[AI-MODEL] initialized general={}, plan={}", this.generalModelName, this.planModelName);
+        log.info("[AI-MODEL] initialized general={}, plan={}, fallback={}",
+                this.generalModelName, this.planModelName, this.planFallbackModelName);
     }
 
     record IntentClassification(String intent) {}
@@ -135,17 +139,63 @@ public class TravelAgentService {
                     .collect(Collectors.joining("\n"));
         }
 
-        return planChatClient.prompt()
+        try {
+            return createPlanWithClient(planChatClient, converter, request, historySummary);
+        } catch (Exception primary) {
+            log.warn("[AI-MODEL] plan model failed. model={}, message={}", planModelName, rootCauseMessage(primary));
+            log.info("[AI-MODEL] fallback attempt with general model={}", planFallbackModelName);
+
+            try {
+                return createPlanWithClient(generalChatClient, converter, request, historySummary);
+            } catch (Exception fallback) {
+                log.error("[AI-MODEL] both primary and fallback model failed. primaryModel={}, fallbackModel={}, root={}",
+                        planModelName, planFallbackModelName, rootCauseMessage(fallback), fallback);
+                throw toModelBusinessException(fallback);
+            }
+        }
+    }
+
+    private AiPlanResponse createPlanWithClient(
+            ChatClient client,
+            BeanOutputConverter<AiPlanResponse> converter,
+            String request,
+            String historySummary
+    ) {
+        return client.prompt()
                 .system(s -> s.text(
-                        "당신은 숙련된 여행 플래너입니다. 사용자 요청을 바탕으로 일정 JSON을 생성하세요.\n" +
-                        "규칙:\n" +
-                        "1) places는 실제 장소명을 사용합니다.\n" +
-                        "2) 동선은 현실적으로 구성합니다.\n" +
-                        "3) memo는 추천 이유를 간결히 작성합니다.\n" +
-                        "4) 반드시 JSON만 반환합니다.\n{formatInstructions}")
+                        "You are a strict travel planner. Return JSON only.\n" +
+                                "Rules:\n" +
+                                "1) Use realistic place names.\n" +
+                                "2) Keep route flow practical.\n" +
+                                "3) Keep memo concise and useful.\n" +
+                                "4) Return valid JSON only.\n{formatInstructions}")
                         .param("formatInstructions", converter.getFormat()))
-                .user("사용자 최종 요청: " + request + "\n\n참고 대화 이력:\n" + historySummary)
+                .user("Final user request: " + request + "\n\nConversation history:\n" + historySummary)
                 .call()
                 .entity(converter);
+    }
+
+    private BusinessException toModelBusinessException(Exception e) {
+        String message = rootCauseMessage(e).toLowerCase();
+
+        if (message.contains("resource_exhausted") || message.contains("429") || message.contains("quota")) {
+            return new BusinessException("AI 요청 한도를 초과했습니다. 잠시 후 다시 시도해 주세요.", HttpStatus.TOO_MANY_REQUESTS);
+        }
+        if (message.contains("credentials") || message.contains("permission") || message.contains("unauthenticated")
+                || message.contains("401") || message.contains("403")) {
+            return new BusinessException("AI 인증/권한 설정 오류가 발생했습니다. 관리자에게 문의해 주세요.", HttpStatus.BAD_GATEWAY);
+        }
+        if (message.contains("model") && message.contains("not found")) {
+            return new BusinessException("AI 모델 설정이 유효하지 않습니다. 관리자에게 문의해 주세요.", HttpStatus.BAD_GATEWAY);
+        }
+        return new BusinessException("AI 일정 생성에 실패했습니다. 잠시 후 다시 시도해 주세요.", HttpStatus.BAD_GATEWAY);
+    }
+
+    private String rootCauseMessage(Throwable throwable) {
+        Throwable current = throwable;
+        while (current.getCause() != null) {
+            current = current.getCause();
+        }
+        return current.getMessage() == null ? current.getClass().getSimpleName() : current.getMessage();
     }
 }

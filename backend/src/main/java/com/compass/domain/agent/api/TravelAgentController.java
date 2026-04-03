@@ -16,6 +16,7 @@ import com.compass.domain.user.dao.UserRepository;
 import com.compass.global.common.ApiResponse;
 import com.compass.global.error.BusinessException;
 import jakarta.validation.Valid;
+import lombok.extern.slf4j.Slf4j;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
@@ -29,6 +30,7 @@ import java.util.stream.Collectors;
 @RestController
 @RequestMapping("/api/agent")
 @RequiredArgsConstructor
+@Slf4j
 public class TravelAgentController {
 
     private final TravelAgentService agentService;
@@ -76,15 +78,16 @@ public class TravelAgentController {
 
         Long savedPlanId = planService.savePlanFromAi(user, verifiedPlan);
 
-        var savedPlan = planRepository.findByIdAndUserIdWithDetails(savedPlanId, user.getId())
-                .orElseThrow(() -> new BusinessException("Saved plan not found.", HttpStatus.NOT_FOUND));
+        try {
+            var savedPlan = planRepository.findByIdAndUserIdWithDetails(savedPlanId, user.getId())
+                    .orElseThrow(() -> new BusinessException("Saved plan not found.", HttpStatus.NOT_FOUND));
 
-        Map<Integer, Itinerary> itineraryByDay = savedPlan.getItineraries().stream()
-                .collect(Collectors.toMap(Itinerary::getDayNumber, Function.identity(), (left, right) -> left));
+            Map<Integer, Itinerary> itineraryByDay = savedPlan.getItineraries().stream()
+                    .collect(Collectors.toMap(Itinerary::getDayNumber, Function.identity(), (left, right) -> left));
 
-        var enrichedDays = verifiedPlan.itineraries() == null
-                ? null
-                : verifiedPlan.itineraries().stream()
+            var enrichedDays = verifiedPlan.itineraries() == null
+                    ? null
+                    : verifiedPlan.itineraries().stream()
                     .map(day -> {
                         Itinerary savedItinerary = itineraryByDay.get(day.day());
                         Long itineraryId = savedItinerary != null ? savedItinerary.getId() : day.itineraryId();
@@ -97,16 +100,30 @@ public class TravelAgentController {
                     })
                     .toList();
 
-        AiPlanResponse enrichedPlan = new AiPlanResponse(
-                savedPlanId,
-                verifiedPlan.title(),
-                verifiedPlan.region(),
-                verifiedPlan.accommodation(),
-                verifiedPlan.startDate(),
-                verifiedPlan.endDate(),
-                enrichedDays
-        );
+            AiPlanResponse enrichedPlan = new AiPlanResponse(
+                    savedPlanId,
+                    verifiedPlan.title(),
+                    verifiedPlan.region(),
+                    verifiedPlan.accommodation(),
+                    verifiedPlan.startDate(),
+                    verifiedPlan.endDate(),
+                    enrichedDays
+            );
 
-        return ApiResponse.success(enrichedPlan);
+            return ApiResponse.success(enrichedPlan);
+        } catch (Exception e) {
+            log.warn("[PLAN-CREATE] enrichment failed. savedPlanId={}, userId={}, message={}",
+                    savedPlanId, user.getId(), e.getMessage());
+            AiPlanResponse fallbackPlan = new AiPlanResponse(
+                    savedPlanId,
+                    verifiedPlan.title(),
+                    verifiedPlan.region(),
+                    verifiedPlan.accommodation(),
+                    verifiedPlan.startDate(),
+                    verifiedPlan.endDate(),
+                    verifiedPlan.itineraries()
+            );
+            return ApiResponse.success(fallbackPlan);
+        }
     }
 }

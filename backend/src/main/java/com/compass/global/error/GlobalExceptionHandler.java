@@ -2,6 +2,7 @@ package com.compass.global.error;
 
 import com.compass.global.common.ApiResponse;
 import jakarta.validation.ConstraintViolationException;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
@@ -17,10 +18,12 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 @RestControllerAdvice
+@Slf4j
 public class GlobalExceptionHandler {
 
     @ExceptionHandler(BusinessException.class)
     public org.springframework.http.ResponseEntity<ApiResponse<Void>> handleBusinessException(BusinessException e) {
+        log.warn("[API-ERROR] business status={} message={}", e.getHttpStatus(), e.getMessage());
         return org.springframework.http.ResponseEntity
                 .status(e.getHttpStatus())
                 .body(ApiResponse.error(e.getMessage()));
@@ -79,6 +82,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     public org.springframework.http.ResponseEntity<ApiResponse<Void>> handleException(Exception e) {
+        log.error("[API-ERROR] unhandled exception", e);
         return org.springframework.http.ResponseEntity
                 .status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(ApiResponse.error("서버 내부 오류가 발생했습니다."));
