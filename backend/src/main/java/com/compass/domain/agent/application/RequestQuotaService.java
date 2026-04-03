@@ -10,6 +10,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -88,6 +89,7 @@ public class RequestQuotaService {
         );
     }
 
+    @Transactional
     public void upsertUserQuotaLimit(Long userId, Integer planPerDayLimit, Integer chatPerDayLimit) {
         Integer normalizedPlan = normalizeOverride(planPerDayLimit);
         Integer normalizedChat = normalizeOverride(chatPerDayLimit);
@@ -103,8 +105,9 @@ public class RequestQuotaService {
         userQuotaSettingRepository.save(setting);
     }
 
+    @Transactional
     public void clearUserQuotaLimit(Long userId) {
-        userQuotaSettingRepository.deleteByUserId(userId);
+        userQuotaSettingRepository.deleteAllByUserId(userId);
     }
 
     private int getDefaultPlanLimit() {
