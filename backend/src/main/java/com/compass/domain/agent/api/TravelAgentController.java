@@ -1,6 +1,7 @@
 package com.compass.domain.agent.api;
 
 import com.compass.domain.agent.application.TravelAgentService;
+import com.compass.domain.agent.application.PlacesVerificationService;
 import com.compass.domain.agent.dao.ChatMessageRepository;
 import com.compass.domain.agent.dao.ChatSessionRepository;
 import com.compass.domain.agent.domain.ChatMessage;
@@ -24,6 +25,7 @@ import org.springframework.web.bind.annotation.*;
 public class TravelAgentController {
 
     private final TravelAgentService agentService;
+    private final PlacesVerificationService placesVerificationService;
     private final PlanCommandService planService;
     private final UserRepository userRepository;
     private final ChatSessionRepository sessionRepository;
@@ -53,6 +55,7 @@ public class TravelAgentController {
                 .build());
 
         AiPlanResponse aiRes = agentService.generateTravelPlan(user, trimmedRequest, history);
+        AiPlanResponse verifiedPlan = placesVerificationService.verifyPlan(aiRes);
 
         messageRepository.save(ChatMessage.builder()
                 .session(session)
@@ -60,8 +63,8 @@ public class TravelAgentController {
                 .content("요청하신 일정 초안 생성을 완료했습니다.")
                 .build());
 
-        planService.savePlanFromAi(user, aiRes);
+        planService.savePlanFromAi(user, verifiedPlan);
 
-        return ApiResponse.success(aiRes);
+        return ApiResponse.success(verifiedPlan);
     }
 }

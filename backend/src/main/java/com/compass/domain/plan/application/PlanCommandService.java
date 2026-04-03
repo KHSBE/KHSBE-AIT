@@ -100,6 +100,7 @@ public class PlanCommandService {
                     itinerary.getPlaces().add(Place.builder()
                             .itinerary(itinerary)
                             .placeName(p.name())
+                            .googlePlaceId(p.googlePlaceId())
                             .latitude(p.lat() != null ? p.lat() : 0.0)
                             .longitude(p.lng() != null ? p.lng() : 0.0)
                             .visitOrder(visitOrder++)

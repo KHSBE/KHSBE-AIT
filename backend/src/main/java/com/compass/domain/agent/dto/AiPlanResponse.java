@@ -21,6 +21,7 @@ public record AiPlanResponse(
             String name,
             String memo,
             Double lat,
-            Double lng
+            Double lng,
+            String googlePlaceId
     ) {}
 }
