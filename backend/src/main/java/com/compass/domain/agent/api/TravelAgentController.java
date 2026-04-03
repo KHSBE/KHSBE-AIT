@@ -1,7 +1,8 @@
 package com.compass.domain.agent.api;
 
-import com.compass.domain.agent.application.TravelAgentService;
 import com.compass.domain.agent.application.PlacesVerificationService;
+import com.compass.domain.agent.application.RequestQuotaService;
+import com.compass.domain.agent.application.TravelAgentService;
 import com.compass.domain.agent.dao.ChatMessageRepository;
 import com.compass.domain.agent.dao.ChatSessionRepository;
 import com.compass.domain.agent.domain.ChatMessage;
@@ -26,6 +27,7 @@ public class TravelAgentController {
 
     private final TravelAgentService agentService;
     private final PlacesVerificationService placesVerificationService;
+    private final RequestQuotaService requestQuotaService;
     private final PlanCommandService planService;
     private final UserRepository userRepository;
     private final ChatSessionRepository sessionRepository;
@@ -35,16 +37,18 @@ public class TravelAgentController {
     @Transactional
     public ApiResponse<AiPlanResponse> createPlan(@Valid @RequestBody PlanRequest req, Authentication auth) {
         var user = userRepository.findByEmail(auth.getName())
-                .orElseThrow(() -> new BusinessException("사용자를 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
+                .orElseThrow(() -> new BusinessException("User not found.", HttpStatus.NOT_FOUND));
+
+        requestQuotaService.assertPlanCreationAllowed(user.getId());
 
         var trimmedRequest = req.request().trim();
         var session = (req.sessionId() != null)
                 ? sessionRepository.findByIdAndUserId(req.sessionId(), user.getId())
-                .orElseThrow(() -> new BusinessException("해당 채팅 세션을 찾을 수 없습니다.", HttpStatus.NOT_FOUND))
+                    .orElseThrow(() -> new BusinessException("Chat session not found.", HttpStatus.NOT_FOUND))
                 : sessionRepository.save(ChatSession.builder()
-                .user(user)
-                .sessionTitle(trimmedRequest.substring(0, Math.min(trimmedRequest.length(), 10)) + "...")
-                .build());
+                    .user(user)
+                    .sessionTitle(trimmedRequest.substring(0, Math.min(trimmedRequest.length(), 10)) + "...")
+                    .build());
 
         var history = messageRepository.findAllBySessionIdOrderBySentAtAsc(session.getId());
 
@@ -64,7 +68,6 @@ public class TravelAgentController {
                 .build());
 
         planService.savePlanFromAi(user, verifiedPlan);
-
         return ApiResponse.success(verifiedPlan);
     }
 }

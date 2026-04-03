@@ -31,6 +31,7 @@ export default function Planner() {
   const [isLoading, setIsLoading] = useState(false);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [toast, setToast] = useState({ visible: false, message: '' });
   const [formData, setFormData] = useState({
     departure: '',
     dest: '',
@@ -58,6 +59,21 @@ export default function Planner() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  useEffect(() => {
+    if (!toast.visible) return undefined;
+    const timer = setTimeout(() => {
+      setToast({ visible: false, message: '' });
+    }, 2600);
+    return () => clearTimeout(timer);
+  }, [toast.visible]);
+
+  const showQuotaToast = (message) => {
+    setToast({
+      visible: true,
+      message: message || '요청 한도를 초과했습니다. 잠시 후 다시 시도해 주세요.'
+    });
+  };
 
   const getHeaders = (isJson = false) => {
     const headers = {};
@@ -154,7 +170,17 @@ export default function Planner() {
       });
 
       if (!response.ok) {
-        throw new Error('채팅 요청 실패');
+        let errorMessage = '채팅 요청에 실패했습니다.';
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData?.message || errorData?.error || errorMessage;
+        } catch {
+          // ignore parse error
+        }
+        if (response.status === 429) {
+          showQuotaToast(errorMessage);
+        }
+        throw new Error(errorMessage);
       }
 
       const data = await response.json();
@@ -205,6 +231,20 @@ export default function Planner() {
         })
       });
 
+      if (!response.ok) {
+        let errorMessage = '일정 생성에 실패했습니다.';
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData?.message || errorData?.error || errorMessage;
+        } catch {
+          // ignore parse error
+        }
+        if (response.status === 429) {
+          showQuotaToast(errorMessage);
+        }
+        throw new Error(errorMessage);
+      }
+
       const data = await response.json();
 
       if (data.success && data.data) {
@@ -219,7 +259,7 @@ export default function Planner() {
       }
     } catch (error) {
       console.error('일정 생성 실패:', error);
-      setMessages((prev) => [...prev, { sender: 'bot', text: '일정 생성 중 서버 오류가 발생했습니다.' }]);
+      setMessages((prev) => [...prev, { sender: 'bot', text: error?.message || '일정 생성 중 서버 오류가 발생했습니다.' }]);
     } finally {
       setIsLoading(false);
     }
@@ -227,6 +267,12 @@ export default function Planner() {
 
   return (
     <div className="relative flex h-[calc(100vh-76px)] overflow-hidden bg-[#eef7ff]">
+      {toast.visible && (
+        <div className="pointer-events-none absolute right-4 top-4 z-[100] max-w-[360px] animate-in fade-in slide-in-from-top-2 rounded-xl border border-[#f4c9c9] bg-[#fff4f4] px-4 py-3 text-sm font-semibold text-[#a83f3f] shadow-lg">
+          {toast.message}
+        </div>
+      )}
+
       {isMobile && isSidebarOpen && (
         <button
           type="button"

@@ -28,6 +28,7 @@ public class TravelAgentService {
     private final ChatClient generalChatClient;
     private final ChatClient planChatClient;
     private final ToolCallback currentWeatherFunction;
+    private final RequestQuotaService requestQuotaService;
     private final ChatSessionRepository sessionRepository;
     private final ChatMessageRepository messageRepository;
     private final String generalModelName;
@@ -37,6 +38,7 @@ public class TravelAgentService {
             @Qualifier("generalChatClient") ChatClient generalChatClient,
             @Qualifier("planChatClient") ChatClient planChatClient,
             ToolCallback currentWeatherFunction,
+            RequestQuotaService requestQuotaService,
             ChatSessionRepository sessionRepository,
             ChatMessageRepository messageRepository,
             @Value("${app.ai.model.general:gemini-3.1-flash-lite-preview}") String generalModelName,
@@ -45,6 +47,7 @@ public class TravelAgentService {
         this.generalChatClient = generalChatClient;
         this.planChatClient = planChatClient;
         this.currentWeatherFunction = currentWeatherFunction;
+        this.requestQuotaService = requestQuotaService;
         this.sessionRepository = sessionRepository;
         this.messageRepository = messageRepository;
         this.generalModelName = generalModelName;
@@ -75,6 +78,8 @@ public class TravelAgentService {
             session = sessionRepository.findByIdAndUserId(sessionId, user.getId())
                     .orElseThrow(() -> new BusinessException("해당 채팅 세션을 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
         }
+
+        requestQuotaService.assertChatAllowedInSession(session.getId());
 
         messageRepository.save(ChatMessage.builder()
                 .session(session)
