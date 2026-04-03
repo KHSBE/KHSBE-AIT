@@ -303,6 +303,43 @@ export default function Planner() {
     }
   };
 
+  const applyCandidateToPlanCard = (messageIndex, dayIndex, placeIndex, candidate) => {
+    setMessages((prev) =>
+      prev.map((msg, idx) => {
+        if (idx !== messageIndex || !msg?.isPlanCard || !msg?.planData) return msg;
+
+        const nextItineraries = (msg.planData.itineraries || []).map((day, dIdx) => {
+          if (dIdx !== dayIndex) return day;
+
+          const nextPlaces = (day.places || []).map((place, pIdx) => {
+            if (pIdx !== placeIndex) return place;
+            return {
+              ...place,
+              name: candidate.name || place.name,
+              googlePlaceId: candidate.googlePlaceId || place.googlePlaceId,
+              lat: candidate.lat ?? place.lat,
+              lng: candidate.lng ?? place.lng,
+              confidence: candidate.confidence ?? place.confidence ?? 1,
+              matchedBy: 'USER_SELECTED_TOP3',
+              verificationUncertain: false,
+              candidates: place.candidates || []
+            };
+          });
+
+          return { ...day, places: nextPlaces };
+        });
+
+        return {
+          ...msg,
+          planData: {
+            ...msg.planData,
+            itineraries: nextItineraries
+          }
+        };
+      })
+    );
+  };
+
   const quotaText = isQuotaLoading && !quota
     ? '남은 횟수 확인 중...'
     : quota
@@ -446,6 +483,27 @@ export default function Planner() {
                                 <div>
                                   <p className="font-semibold text-[#1f3550]">{place.placeName || place.name}</p>
                                   <p className="mt-0.5 text-xs text-[#4b6177]">{place.memo}</p>
+                                  {place.verificationUncertain && (
+                                    <div className="mt-2 space-y-1">
+                                      <span className="inline-flex rounded-full border border-[#f2d5ab] bg-[#fff8ee] px-2 py-1 text-[10px] font-bold text-[#9a5a10]">
+                                        검증 불확실 · 후보 선택 가능
+                                      </span>
+                                      {Array.isArray(place.candidates) && place.candidates.length > 0 && (
+                                        <div className="flex flex-wrap gap-1">
+                                          {place.candidates.slice(0, 3).map((candidate, candidateIndex) => (
+                                            <button
+                                              key={`${candidate.googlePlaceId || candidate.name}-${candidateIndex}`}
+                                              type="button"
+                                              onClick={() => applyCandidateToPlanCard(index, dayIndex, placeIndex, candidate)}
+                                              className="rounded-md border border-[#d7e9fa] bg-[#f4faff] px-2 py-1 text-[10px] font-bold text-[#2e678d] transition hover:border-[#1f8ef1] hover:text-[#1f8ef1]"
+                                            >
+                                              {candidate.name}
+                                            </button>
+                                          ))}
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
                                 </div>
                               </li>
                             ))}

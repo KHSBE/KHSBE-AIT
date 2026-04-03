@@ -2,7 +2,6 @@ package com.compass.domain.agent.dto;
 
 import java.util.List;
 
-// AI 일정 생성 응답 규격
 public record AiPlanResponse(
         String title,
         String region,
@@ -15,13 +14,50 @@ public record AiPlanResponse(
             int day,
             String theme,
             List<PlaceDetail> places
-    ) {}
+    ) {
+    }
 
     public record PlaceDetail(
             String name,
             String memo,
             Double lat,
             Double lng,
-            String googlePlaceId
-    ) {}
+            String googlePlaceId,
+            Double confidence,
+            String matchedBy,
+            boolean verificationUncertain,
+            List<PlaceCandidate> candidates
+    ) {
+        public PlaceDetail(String name, String memo, Double lat, Double lng, String googlePlaceId) {
+            this(name, memo, lat, lng, googlePlaceId, null, null, false, List.of());
+        }
+
+        public PlaceDetail withVerification(Double confidence, String matchedBy, boolean verificationUncertain, List<PlaceCandidate> candidates) {
+            return new PlaceDetail(
+                    name,
+                    memo,
+                    lat,
+                    lng,
+                    googlePlaceId,
+                    confidence,
+                    matchedBy,
+                    verificationUncertain,
+                    candidates == null ? List.of() : List.copyOf(candidates)
+            );
+        }
+    }
+
+    public record PlaceCandidate(
+            String name,
+            String googlePlaceId,
+            Double lat,
+            Double lng,
+            String address,
+            String primaryType,
+            Double rating,
+            Integer userRatingCount,
+            Double confidence,
+            String matchedBy
+    ) {
+    }
 }

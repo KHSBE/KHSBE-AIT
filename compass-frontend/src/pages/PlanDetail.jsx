@@ -13,7 +13,8 @@ import {
   GripVertical,
   Trash2,
   RefreshCcw,
-  Search
+  Search,
+  Sparkles
 } from 'lucide-react';
 import { GoogleMap, useJsApiLoader, Marker, Polyline } from '@react-google-maps/api';
 import { fetchWithAuth, buildApiUrl } from '../utils/api';
@@ -250,6 +251,7 @@ export default function PlanDetail() {
   const [replaceTarget, setReplaceTarget] = useState(null);
   const [replaceCandidates, setReplaceCandidates] = useState([]);
   const [isSearchingPlace, setIsSearchingPlace] = useState(false);
+  const [autoReplaceKey, setAutoReplaceKey] = useState(null);
   const [replaceSearchError, setReplaceSearchError] = useState('');
   const [detailPlace, setDetailPlace] = useState(null);
   const [detailState, setDetailState] = useState({ loading: false, error: '', data: null });
@@ -538,6 +540,56 @@ export default function PlanDetail() {
       latitude: candidate.latitude,
       longitude: candidate.longitude
     }));
+  };
+
+  const autoReplacePlace = async (dayNumber, placeIndex, place) => {
+    const service = placesServiceRef.current;
+    if (!service) {
+      alert('Google Places가 아직 준비되지 않았습니다. 잠시 후 다시 시도해 주세요.');
+      return;
+    }
+
+    const actionKey = `${dayNumber}-${placeIndex}`;
+    setAutoReplaceKey(actionKey);
+
+    try {
+      const query = `${place.placeName || ''} ${plan?.region || ''}`.trim();
+      if (!query) {
+        alert('자동 대체를 위한 장소명이 없습니다.');
+        return;
+      }
+
+      const results = await searchPlaces(service, query);
+      if (!results.length) {
+        alert('자동 대체 후보를 찾지 못했습니다. 직접 교체를 사용해 주세요.');
+        return;
+      }
+
+      const candidate = results[0];
+      const candidateName = candidate.name || place.placeName;
+      const lat = candidate.geometry?.location?.lat?.() ?? place.latitude ?? 0;
+      const lng = candidate.geometry?.location?.lng?.() ?? place.longitude ?? 0;
+      const placeId = candidate.place_id || place.googlePlaceId || '';
+
+      updatePlaces(dayNumber, (places) =>
+        places.map((item, idx) =>
+          idx === placeIndex
+            ? {
+                ...item,
+                placeName: candidateName,
+                latitude: lat,
+                longitude: lng,
+                googlePlaceId: placeId
+              }
+            : item
+        )
+      );
+    } catch (error) {
+      console.error('자동 대체 실패:', error);
+      alert('자동 대체 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.');
+    } finally {
+      setAutoReplaceKey(null);
+    }
   };
 
   const applyReplace = () => {
@@ -882,6 +934,21 @@ export default function PlanDetail() {
 
                         {isEditMode && (
                           <div className="flex items-center gap-1">
+                            <button
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                autoReplacePlace(day.dayNumber, idx, place);
+                              }}
+                              disabled={autoReplaceKey === `${day.dayNumber}-${idx}`}
+                              className="inline-flex items-center gap-1 rounded-lg border border-[#d3e7f9] bg-white px-2 py-1 text-xs font-bold text-[#2e6b91] hover:border-[#1f8ef1] hover:text-[#1f8ef1] disabled:opacity-60"
+                            >
+                              {autoReplaceKey === `${day.dayNumber}-${idx}` ? (
+                                <Loader2 size={12} className="animate-spin" />
+                              ) : (
+                                <Sparkles size={12} />
+                              )}
+                              자동대체
+                            </button>
                             <button
                               onClick={(event) => {
                                 event.stopPropagation();

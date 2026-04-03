@@ -76,6 +76,9 @@ app:
     verification:
       enabled: ${PLACES_VERIFICATION_ENABLED:true}
       max-places-per-plan: ${PLACES_VERIFICATION_MAX_PLACES:20}
+      min-score: ${PLACES_VERIFICATION_MIN_SCORE:45}
+      candidates-per-query: ${PLACES_VERIFICATION_CANDIDATES_PER_QUERY:5}
+      cache-ttl-hours: ${PLACES_VERIFICATION_CACHE_TTL_HOURS:24}
   quota:
     plan-per-day: ${PLAN_QUOTA_PER_DAY:3}
     chat-per-day: ${CHAT_QUOTA_PER_DAY:${CHAT_QUOTA_PER_SESSION:10}}
