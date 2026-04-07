@@ -24,12 +24,12 @@ public class AuthController {
 
         String refreshToken = request.get("refreshToken");
 
-        if (refreshToken != null && jwtTokenProvider.validateToken(refreshToken)) {
+        if (refreshToken != null && jwtTokenProvider.validateRefreshToken(refreshToken)) {
             String email = jwtTokenProvider.getUserEmail(refreshToken);
             String newAccessToken = jwtTokenProvider.createToken(email);
             return ApiResponse.success(Map.of("accessToken", newAccessToken));
         }
 
-        throw new BusinessException("유효하지 않은 refreshToken입니다. 다시 로그인해 주세요.", HttpStatus.UNAUTHORIZED);
+        throw new BusinessException("유효한 refresh token이 아닙니다. 다시 로그인해 주세요.", HttpStatus.UNAUTHORIZED);
     }
 }

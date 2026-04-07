@@ -19,11 +19,16 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Locale;
 import java.util.stream.Collectors;
 
 @Service
 @Slf4j
 public class TravelAgentService {
+
+    private static final String INTENT_PLAN_CREATION = "PLAN_CREATION";
+    private static final String INTENT_GENERAL_CHAT = "GENERAL_CHAT";
+    private static final String PLAN_FORM_GUIDE_MESSAGE = "좋습니다. 여행 일정을 만들기 위해 입력 폼 정보를 알려주세요.";
 
     private final ChatClient generalChatClient;
     private final ChatClient planChatClient;
@@ -34,6 +39,7 @@ public class TravelAgentService {
     private final String generalModelName;
     private final String planModelName;
     private final String planFallbackModelName;
+    private final int historyWindowMessages;
 
     public TravelAgentService(
             @Qualifier("generalChatClient") ChatClient generalChatClient,
@@ -44,7 +50,8 @@ public class TravelAgentService {
             ChatMessageRepository messageRepository,
             @Value("${app.ai.model.general:gemini-3.1-flash-lite-preview}") String generalModelName,
             @Value("${app.ai.model.plan:gemini-3.1-pro-preview}") String planModelName,
-            @Value("${app.ai.model.plan-fallback:gemini-3.1-flash-lite-preview}") String planFallbackModelName
+            @Value("${app.ai.model.plan-fallback:gemini-3.1-flash-lite-preview}") String planFallbackModelName,
+            @Value("${app.ai.chat.history-window-messages:12}") int historyWindowMessages
     ) {
         this.generalChatClient = generalChatClient;
         this.planChatClient = planChatClient;
@@ -55,12 +62,13 @@ public class TravelAgentService {
         this.generalModelName = generalModelName;
         this.planModelName = planModelName;
         this.planFallbackModelName = planFallbackModelName;
+        this.historyWindowMessages = Math.max(4, historyWindowMessages);
 
-        log.info("[AI-MODEL] initialized general={}, plan={}, fallback={}",
-                this.generalModelName, this.planModelName, this.planFallbackModelName);
+        log.info("[AI-MODEL] initialized general={}, plan={}, fallback={}, historyWindowMessages={}",
+                this.generalModelName, this.planModelName, this.planFallbackModelName, this.historyWindowMessages);
     }
 
-    record IntentClassification(String intent) {}
+    record ChatAssistantResult(String intent, String message) {}
 
     @Transactional
     public ChatResponse chatWithAgent(User user, Long sessionId, String userMessage) {
@@ -92,31 +100,39 @@ public class TravelAgentService {
                 .build());
 
         List<ChatMessage> history = messageRepository.findAllBySessionIdOrderBySentAtAsc(session.getId());
-        String conversationHistory = history.stream()
-                .map(msg -> msg.getSenderRole() + ": " + msg.getContent())
-                .collect(Collectors.joining("\n"));
+        String recentHistory = buildRecentHistory(history);
 
-        BeanOutputConverter<IntentClassification> intentConverter = new BeanOutputConverter<>(IntentClassification.class);
-        IntentClassification classification = generalChatClient.prompt()
-                .system(s -> s.text("사용자 메시지 의도를 분류하세요. 여행 일정 생성 요청이면 'PLAN_CREATION', 그 외는 'GENERAL_CHAT'.\n{formatInstructions}")
-                        .param("formatInstructions", intentConverter.getFormat()))
-                .user(trimmedMessage)
-                .call()
-                .entity(intentConverter);
+        BeanOutputConverter<ChatAssistantResult> converter = new BeanOutputConverter<>(ChatAssistantResult.class);
+        ChatAssistantResult result;
 
-        String intent = classification.intent();
-        String aiReplyText;
-
-        if ("PLAN_CREATION".equals(intent)) {
-            aiReplyText = "좋습니다. 여행 일정을 만들기 위해 입력 폼 정보를 알려주세요.";
-        } else {
-            aiReplyText = generalChatClient.prompt()
-                    .system("당신은 Compass 여행 도우미입니다. 정확하고 간결하게 답변하세요.")
-                    .user("이전 대화 이력:\n" + conversationHistory + "\n\n현재 사용자 메시지: " + trimmedMessage)
+        try {
+            result = generalChatClient.prompt()
+                    .system(s -> s.text(
+                            "당신은 Compass 여행 도우미입니다. 아래 대화 문맥을 보고 반드시 JSON으로만 답하세요.\n" +
+                                    "intent는 'PLAN_CREATION' 또는 'GENERAL_CHAT' 중 하나여야 합니다.\n" +
+                                    "- 사용자가 여행 일정 생성을 명확히 요청하면 PLAN_CREATION\n" +
+                                    "- 그 외 질문/대화는 GENERAL_CHAT\n" +
+                                    "message는 사용자에게 보여줄 한국어 문장입니다.\n" +
+                                    "PLAN_CREATION일 때는 message를 짧게 작성하세요.\n" +
+                                    "{formatInstructions}")
+                            .param("formatInstructions", converter.getFormat()))
+                    .user("최근 대화:\n" + recentHistory)
+                    .toolCallbacks(currentWeatherFunction)
+                    .call()
+                    .entity(converter);
+        } catch (Exception e) {
+            log.warn("[AI-MODEL] chat single-call parse failed. model={}, message={}", generalModelName, rootCauseMessage(e));
+            String fallbackReply = generalChatClient.prompt()
+                    .system("당신은 Compass 여행 도우미입니다. 정확하고 간결하게 한국어로 답변하세요.")
+                    .user("최근 대화:\n" + recentHistory)
                     .toolCallbacks(currentWeatherFunction)
                     .call()
                     .content();
+            result = new ChatAssistantResult(INTENT_GENERAL_CHAT, fallbackReply);
         }
+
+        String intent = normalizeIntent(result.intent(), trimmedMessage);
+        String aiReplyText = normalizeReply(intent, result.message());
 
         messageRepository.save(ChatMessage.builder()
                 .session(session)
@@ -173,6 +189,42 @@ public class TravelAgentService {
                 .user("Final user request: " + request + "\n\nConversation history:\n" + historySummary)
                 .call()
                 .entity(converter);
+    }
+
+    private String buildRecentHistory(List<ChatMessage> history) {
+        if (history == null || history.isEmpty()) {
+            return "(대화 이력 없음)";
+        }
+
+        int fromIndex = Math.max(0, history.size() - historyWindowMessages);
+        return history.subList(fromIndex, history.size()).stream()
+                .map(msg -> {
+                    String role = "USER".equalsIgnoreCase(msg.getSenderRole()) ? "사용자" : "어시스턴트";
+                    return role + ": " + msg.getContent();
+                })
+                .collect(Collectors.joining("\n"));
+    }
+
+    private String normalizeIntent(String intent, String latestUserMessage) {
+        if (intent != null && INTENT_PLAN_CREATION.equalsIgnoreCase(intent.trim())) {
+            return INTENT_PLAN_CREATION;
+        }
+
+        String normalizedUserText = latestUserMessage == null ? "" : latestUserMessage.toLowerCase(Locale.ROOT);
+        if (normalizedUserText.contains("여행") && normalizedUserText.contains("일정")) {
+            return INTENT_PLAN_CREATION;
+        }
+        return INTENT_GENERAL_CHAT;
+    }
+
+    private String normalizeReply(String intent, String message) {
+        if (INTENT_PLAN_CREATION.equals(intent)) {
+            return PLAN_FORM_GUIDE_MESSAGE;
+        }
+        if (message == null || message.isBlank()) {
+            return "무엇을 도와드릴까요?";
+        }
+        return message.trim();
     }
 
     private BusinessException toModelBusinessException(Exception e) {

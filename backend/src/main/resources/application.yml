@@ -60,7 +60,7 @@ jwt:
 
 logging:
   level:
-    org.springframework.ai: DEBUG
+    org.springframework.ai: INFO
 
 weather:
   api-key: ${WEATHER_API_KEY:default}
@@ -70,6 +70,8 @@ app:
     model:
       general: ${AI_MODEL_GENERAL:gemini-3.1-flash-lite-preview}
       plan: ${AI_MODEL_PLAN:gemini-3.1-pro-preview}
+    chat:
+      history-window-messages: ${AI_CHAT_HISTORY_WINDOW_MESSAGES:12}
   places:
     api-key: ${GOOGLE_PLACES_API_KEY:}
     language-code: ${GOOGLE_PLACES_LANGUAGE:ko}
