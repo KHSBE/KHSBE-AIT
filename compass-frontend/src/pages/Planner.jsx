@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import { fetchWithAuth, buildApiUrl } from '../utils/api';
 
-const BOT_WELCOME_MESSAGE = '안녕하세요. 어디로 여행을 떠나고 싶으신가요?';
+const BOT_WELCOME_MESSAGE = '안녕하세요. 일반 대화도 가능하고, 여행 일정 요청 시 입력 폼을 열어 도와드려요.';
 const BOT_NEW_CHAT_MESSAGE = '새로운 여행 계획을 시작해볼까요? 목적지나 스타일을 알려주세요.';
 
 export default function Planner() {
@@ -397,6 +397,9 @@ export default function Planner() {
     : quota
       ? `일정 ${quota.planPerDayRemaining}/${quota.planPerDayLimit} · 채팅 ${quota.chatPerDayRemaining}/${quota.chatPerDayLimit}`
       : '남은 횟수 -';
+  const plannerInputPlaceholder = isMobile
+    ? '예: 여행 일정 짜줘'
+    : '예: 여행 일정 짜줘 (요청하면 입력 폼이 열려요)';
 
   return (
     <div className="relative flex h-[calc(100vh-76px)] overflow-hidden bg-[#eef7ff]">
@@ -584,29 +587,34 @@ export default function Planner() {
         </div>
 
         <div className="border-t border-[#d6e9fa] bg-[#f9fdff] p-4">
-          <div className="relative mx-auto flex max-w-3xl gap-2 rounded-full border border-[#d2e8fb] bg-white shadow-sm transition-all focus-within:border-[#1f8ef1] focus-within:ring-2 focus-within:ring-[#dff1ff]">
-            <div className="ml-3 flex shrink-0 items-center">
+          <div className="mx-auto flex max-w-3xl flex-col gap-1 rounded-3xl border border-[#d2e8fb] bg-white p-2 shadow-sm transition-all focus-within:border-[#1f8ef1] focus-within:ring-2 focus-within:ring-[#dff1ff] sm:flex-row sm:items-center sm:gap-2 sm:rounded-full">
+            <div className="ml-1 flex shrink-0 items-center">
               <span className="rounded-full border border-[#d9ebfb] bg-[#f3f9ff] px-3 py-1 text-[11px] font-bold text-[#3d6f95]">
                 {quotaText}
               </span>
             </div>
-            <input
-              type="text"
-              value={inputMessage}
-              onChange={(event) => setInputMessage(event.target.value)}
-              onKeyDown={(event) => event.key === 'Enter' && sendMessage()}
-              placeholder="예: 제주도 2박 3일, 맛집 중심 일정 짜줘"
-              className="flex-1 rounded-full border-none bg-transparent px-6 py-4 text-[15px] focus:outline-none"
-            />
-            <button
-              onClick={sendMessage}
-              disabled={isLoading}
-              className="absolute bottom-2 right-2 top-2 flex items-center justify-center rounded-full bg-[#1f8ef1] px-5 text-white shadow-sm transition hover:bg-[#1878cc] disabled:bg-gray-300"
-            >
-              <Send size={18} />
-            </button>
+            <div className="relative w-full sm:flex-1">
+              <input
+                type="text"
+                value={inputMessage}
+                onChange={(event) => setInputMessage(event.target.value)}
+                onKeyDown={(event) => event.key === 'Enter' && sendMessage()}
+                placeholder={plannerInputPlaceholder}
+                className="w-full rounded-full border-none bg-transparent py-3 pl-4 pr-14 text-[14px] focus:outline-none sm:px-6 sm:py-4 sm:text-[15px]"
+              />
+              <button
+                onClick={sendMessage}
+                disabled={isLoading}
+                className="absolute bottom-1 right-1 top-1 flex items-center justify-center rounded-full bg-[#1f8ef1] px-4 text-white shadow-sm transition hover:bg-[#1878cc] disabled:bg-gray-300"
+              >
+                <Send size={18} />
+              </button>
+            </div>
           </div>
           <p className="mt-3 text-center text-xs text-[#8aa1b7]">
+            자유 대화 가능 · 일정 요청 시 입력 폼이 열립니다.
+          </p>
+          <p className="mt-1 text-center text-xs text-[#8aa1b7]">
             생성된 일정은 참고용이며, 실제 예약/영업 정보는 별도로 확인해 주세요.
           </p>
         </div>
