@@ -50,7 +50,9 @@ class TravelAgentServiceAuthorizationTest {
                 chatSessionRepository,
                 chatMessageRepository,
                 "gemini-3.1-flash-lite-preview",
-                "gemini-3.1-pro-preview"
+                "gemini-3.1-pro-preview",
+                "gemini-3.1-flash-lite-preview",
+                12
         );
 
         User user = User.builder().id(1L).email("u1@test.com").build();

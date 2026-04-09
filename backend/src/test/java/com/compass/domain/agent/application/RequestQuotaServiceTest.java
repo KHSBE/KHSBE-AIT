@@ -1,6 +1,8 @@
 package com.compass.domain.agent.application;
 
 import com.compass.domain.agent.dao.ChatMessageRepository;
+import com.compass.domain.agent.dao.UserQuotaDailyResetRepository;
+import com.compass.domain.agent.dao.UserQuotaSettingRepository;
 import com.compass.domain.plan.dao.TravelPlanRepository;
 import com.compass.global.error.BusinessException;
 import org.junit.jupiter.api.BeforeEach;
@@ -15,6 +17,8 @@ import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -26,11 +30,24 @@ class RequestQuotaServiceTest {
     @Mock
     private ChatMessageRepository chatMessageRepository;
 
+    @Mock
+    private UserQuotaSettingRepository userQuotaSettingRepository;
+
+    @Mock
+    private UserQuotaDailyResetRepository userQuotaDailyResetRepository;
+
     private RequestQuotaService requestQuotaService;
 
     @BeforeEach
     void setUp() {
-        requestQuotaService = new RequestQuotaService(travelPlanRepository, chatMessageRepository);
+        requestQuotaService = new RequestQuotaService(
+                travelPlanRepository,
+                chatMessageRepository,
+                userQuotaSettingRepository,
+                userQuotaDailyResetRepository
+        );
+        when(userQuotaSettingRepository.findByUserId(anyLong())).thenReturn(java.util.Optional.empty());
+        when(userQuotaDailyResetRepository.findByUserIdAndQuotaDate(anyLong(), any())).thenReturn(java.util.Optional.empty());
         ReflectionTestUtils.setField(requestQuotaService, "planPerDayLimit", 3);
         ReflectionTestUtils.setField(requestQuotaService, "chatPerDayLimit", 10);
     }
@@ -55,7 +72,7 @@ class RequestQuotaServiceTest {
 
     @Test
     void assertChatAllowedToday_shouldThrow429_whenReachedLimit() {
-        when(chatMessageRepository.countBySessionUserIdAndSenderRoleAndSentAtBetween(any(), any(), any(), any()))
+        when(chatMessageRepository.countBySessionUserIdAndSenderRoleAndSentAtBetween(any(), anyString(), any(), any()))
                 .thenReturn(10L);
 
         BusinessException exception = assertThrows(

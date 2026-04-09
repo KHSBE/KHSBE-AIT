@@ -66,19 +66,19 @@ class PlanCommandServiceTest {
     void savePlanFromAi_shouldPersistMappedPlanAndPlaces() {
         User user = User.builder().id(1L).email("u1@test.com").build();
         AiPlanResponse response = new AiPlanResponse(
-                "부산 여행",
-                "부산",
-                "해운대 호텔",
+                "Busan trip",
+                "Busan",
+                "Haeundae Hotel",
                 "2026-04-10",
                 "2026-04-11",
                 List.of(
                         new AiPlanResponse.DayItinerary(
                                 1,
-                                "해운대 코스",
+                                "Haeundae course",
                                 List.of(
                                         new AiPlanResponse.PlaceDetail(
-                                                "해운대 해수욕장",
-                                                "아침 산책",
+                                                "Haeundae Beach",
+                                                "Morning walk",
                                                 35.1587,
                                                 129.1604,
                                                 "pid-1"
@@ -101,7 +101,7 @@ class PlanCommandServiceTest {
         verify(planRepository).save(captor.capture());
         TravelPlan saved = captor.getValue();
 
-        assertEquals("부산 여행", saved.getTitle());
+        assertEquals("Busan trip", saved.getTitle());
         assertEquals(LocalDate.of(2026, 4, 10), saved.getStartDate());
         assertEquals(1, saved.getItineraries().size());
 
@@ -110,7 +110,7 @@ class PlanCommandServiceTest {
         assertEquals(1, itinerary.getPlaces().size());
 
         Place place = itinerary.getPlaces().get(0);
-        assertEquals("해운대 해수욕장", place.getPlaceName());
+        assertEquals("Haeundae Beach", place.getPlaceName());
         assertEquals("pid-1", place.getGooglePlaceId());
         assertNotNull(place.getVisitOrder());
         assertEquals(1, place.getVisitOrder());
