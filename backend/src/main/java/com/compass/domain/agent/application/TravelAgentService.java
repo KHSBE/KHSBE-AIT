@@ -64,15 +64,16 @@ public class TravelAgentService {
         this.planFallbackModelName = planFallbackModelName;
         this.historyWindowMessages = Math.max(4, historyWindowMessages);
 
-        log.info("[AI-MODEL] initialized general={}, plan={}, fallback={}, historyWindowMessages={}",
+        log.debug("[AI-MODEL] initialized general={}, plan={}, fallback={}, historyWindowMessages={}",
                 this.generalModelName, this.planModelName, this.planFallbackModelName, this.historyWindowMessages);
     }
 
-    record ChatAssistantResult(String intent, String message) {}
+    record ChatAssistantResult(String intent, String message) {
+    }
 
     @Transactional
     public ChatResponse chatWithAgent(User user, Long sessionId, String userMessage) {
-        log.info("[AI-MODEL] chatWithAgent -> general model={}", generalModelName);
+        log.debug("[AI-MODEL] chatWithAgent -> general model={}", generalModelName);
 
         if (userMessage == null || userMessage.isBlank()) {
             throw new BusinessException("메시지가 비어 있습니다.", HttpStatus.BAD_REQUEST);
@@ -108,15 +109,15 @@ public class TravelAgentService {
         try {
             result = generalChatClient.prompt()
                     .system(s -> s.text(
-                            "당신은 Compass 여행 도우미입니다. 아래 대화 문맥을 보고 반드시 JSON으로만 답하세요.\n" +
-                                    "intent는 'PLAN_CREATION' 또는 'GENERAL_CHAT' 중 하나여야 합니다.\n" +
-                                    "- 사용자가 여행 일정 생성을 명확히 요청하면 PLAN_CREATION\n" +
-                                    "- 그 외 질문/대화는 GENERAL_CHAT\n" +
-                                    "message는 사용자에게 보여줄 한국어 문장입니다.\n" +
-                                    "PLAN_CREATION일 때는 message를 짧게 작성하세요.\n" +
-                                    "{formatInstructions}")
+                            "당신은 Compass 여행 도우미입니다. 아래 대화 문맥을 보고 반드시 JSON으로만 응답하세요.\n"
+                                    + "intent는 'PLAN_CREATION' 또는 'GENERAL_CHAT' 중 하나여야 합니다.\n"
+                                    + "- 사용자가 여행 일정 생성을 명확히 요청하면 PLAN_CREATION\n"
+                                    + "- 그 외 질문/대화는 GENERAL_CHAT\n"
+                                    + "message는 사용자에게 보여줄 자연스러운 문장입니다.\n"
+                                    + "PLAN_CREATION일 때는 message를 짧게 작성하세요.\n"
+                                    + "{formatInstructions}")
                             .param("formatInstructions", converter.getFormat()))
-                    .user("최근 대화:\n" + recentHistory)
+                    .user("최근 대화\n" + recentHistory)
                     .toolCallbacks(currentWeatherFunction)
                     .call()
                     .entity(converter);
@@ -124,7 +125,7 @@ public class TravelAgentService {
             log.warn("[AI-MODEL] chat single-call parse failed. model={}, message={}", generalModelName, rootCauseMessage(e));
             String fallbackReply = generalChatClient.prompt()
                     .system("당신은 Compass 여행 도우미입니다. 정확하고 간결하게 한국어로 답변하세요.")
-                    .user("최근 대화:\n" + recentHistory)
+                    .user("최근 대화\n" + recentHistory)
                     .toolCallbacks(currentWeatherFunction)
                     .call()
                     .content();
@@ -144,7 +145,7 @@ public class TravelAgentService {
     }
 
     public AiPlanResponse generateTravelPlan(User user, String request, List<ChatMessage> history) {
-        log.info("[AI-MODEL] generateTravelPlan -> plan model={}", planModelName);
+        log.debug("[AI-MODEL] generateTravelPlan -> plan model={}", planModelName);
 
         BeanOutputConverter<AiPlanResponse> converter = new BeanOutputConverter<>(AiPlanResponse.class);
 
@@ -159,7 +160,7 @@ public class TravelAgentService {
             return createPlanWithClient(planChatClient, converter, request, historySummary);
         } catch (Exception primary) {
             log.warn("[AI-MODEL] plan model failed. model={}, message={}", planModelName, rootCauseMessage(primary));
-            log.info("[AI-MODEL] fallback attempt with general model={}", planFallbackModelName);
+            log.debug("[AI-MODEL] fallback attempt with general model={}", planFallbackModelName);
 
             try {
                 return createPlanWithClient(generalChatClient, converter, request, historySummary);
@@ -179,12 +180,12 @@ public class TravelAgentService {
     ) {
         return client.prompt()
                 .system(s -> s.text(
-                        "You are a strict travel planner. Return JSON only.\n" +
-                                "Rules:\n" +
-                                "1) Use realistic place names.\n" +
-                                "2) Keep route flow practical.\n" +
-                                "3) Keep memo concise and useful.\n" +
-                                "4) Return valid JSON only.\n{formatInstructions}")
+                        "You are a strict travel planner. Return JSON only.\n"
+                                + "Rules:\n"
+                                + "1) Use realistic place names.\n"
+                                + "2) Keep route flow practical.\n"
+                                + "3) Keep memo concise and useful.\n"
+                                + "4) Return valid JSON only.\n{formatInstructions}")
                         .param("formatInstructions", converter.getFormat()))
                 .user("Final user request: " + request + "\n\nConversation history:\n" + historySummary)
                 .call()

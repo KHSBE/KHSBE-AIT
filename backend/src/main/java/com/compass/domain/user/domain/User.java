@@ -4,7 +4,6 @@ import com.compass.global.common.BaseEntity;
 import jakarta.persistence.*;
 import lombok.*;
 
-// 사용자 정보
 @Entity
 @Getter
 @Table(name = "users")
@@ -23,6 +22,20 @@ public class User extends BaseEntity {
     private String password;
     private String nickname;
 
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    @Builder.Default
+    private Role role = Role.USER;
+
     @OneToOne(mappedBy = "user", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     private UserPreference preference;
+
+    public void updateProfile(String nickname, Role role) {
+        this.nickname = nickname;
+        this.role = role == null ? Role.USER : role;
+    }
+
+    public Role getRoleOrDefault() {
+        return role == null ? Role.USER : role;
+    }
 }

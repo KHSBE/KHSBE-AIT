@@ -60,7 +60,7 @@ jwt:
 
 logging:
   level:
-    org.springframework.ai: INFO
+    org.springframework.ai: WARN
 
 weather:
   api-key: ${WEATHER_API_KEY:default}

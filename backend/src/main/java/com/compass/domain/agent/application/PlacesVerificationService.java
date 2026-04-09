@@ -389,16 +389,16 @@ public class PlacesVerificationService {
             return "";
         }
 
-        if (containsAny(normalized, "맛집", "식당", "음식", "점심", "저녁", "카페")) {
+        if (containsAny(normalized, "맛집", "식당", "음식", "저녁", "점심", "카페", "브런치")) {
             return "restaurant";
         }
-        if (containsAny(normalized, "호텔", "숙소", "체크인", "펜션")) {
+        if (containsAny(normalized, "호텔", "숙소", "체크인", "리조트", "펜션")) {
             return "lodging";
         }
-        if (containsAny(normalized, "시장", "쇼핑", "기념품")) {
+        if (containsAny(normalized, "시장", "쇼핑", "기념품", "백화점", "몰")) {
             return "shopping";
         }
-        if (containsAny(normalized, "박물관", "미술관", "공원", "해변", "관광", "명소", "신사", "사찰")) {
+        if (containsAny(normalized, "박물관", "미술관", "공원", "해변", "관광", "명소", "유적", "사찰")) {
             return "tourist_attraction";
         }
         return "";
@@ -541,3 +541,4 @@ public class PlacesVerificationService {
     private record CacheEntry(long expiresAt, List<GooglePlaceCandidate> candidates) {
     }
 }
+

@@ -6,26 +6,31 @@ import jakarta.annotation.PostConstruct;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.stereotype.Component;
 
 import java.security.Key;
 import java.util.Base64;
-import java.util.Collections;
 import java.util.Date;
+import java.util.List;
 import java.util.Map;
 
 @Component
 public class JwtTokenProvider {
 
     private static final String CLAIM_TOKEN_TYPE = "tokenType";
+    private static final String CLAIM_ROLE = "role";
+
     private static final String TOKEN_TYPE_ACCESS = "ACCESS";
     private static final String TOKEN_TYPE_REFRESH = "REFRESH";
+
+    private static final String DEFAULT_ROLE = "USER";
 
     @Value("${jwt.secret}")
     private String secretKey;
 
-    private final long tokenValidTime = 30 * 60 * 1000L; // Access Token: 30분
-    private final long refreshTokenValidTime = 14 * 24 * 60 * 60 * 1000L; // Refresh Token: 14일
+    private final long tokenValidTime = 30 * 60 * 1000L;
+    private final long refreshTokenValidTime = 14 * 24 * 60 * 60 * 1000L;
 
     private Key key;
 
@@ -36,16 +41,27 @@ public class JwtTokenProvider {
     }
 
     public String createToken(String email) {
-        return createJwt(email, tokenValidTime, TOKEN_TYPE_ACCESS);
+        return createToken(email, DEFAULT_ROLE);
+    }
+
+    public String createToken(String email, String role) {
+        return createJwt(email, role, tokenValidTime, TOKEN_TYPE_ACCESS);
     }
 
     public String createRefreshToken(String email) {
-        return createJwt(email, refreshTokenValidTime, TOKEN_TYPE_REFRESH);
+        return createRefreshToken(email, DEFAULT_ROLE);
     }
 
-    private String createJwt(String email, long validTime, String tokenType) {
+    public String createRefreshToken(String email, String role) {
+        return createJwt(email, role, refreshTokenValidTime, TOKEN_TYPE_REFRESH);
+    }
+
+    private String createJwt(String email, String role, long validTime, String tokenType) {
         var claims = Jwts.claims().setSubject(email);
-        claims.putAll(Map.of(CLAIM_TOKEN_TYPE, tokenType));
+        claims.putAll(Map.of(
+                CLAIM_TOKEN_TYPE, tokenType,
+                CLAIM_ROLE, normalizeRole(role)
+        ));
 
         var now = new Date();
         return Jwts.builder()
@@ -60,12 +76,29 @@ public class JwtTokenProvider {
         if (!validateAccessToken(token)) {
             throw new JwtException("Invalid access token type");
         }
-        var email = getUserEmail(token);
-        return new UsernamePasswordAuthenticationToken(email, "", Collections.emptyList());
+
+        String email = getUserEmail(token);
+        String role = getUserRole(token);
+
+        return new UsernamePasswordAuthenticationToken(
+                email,
+                "",
+                List.of(new SimpleGrantedAuthority("ROLE_" + normalizeRole(role)))
+        );
     }
 
     public String getUserEmail(String token) {
         return parseClaims(token).getBody().getSubject();
+    }
+
+    public String getUserRole(String token) {
+        try {
+            var claims = parseClaims(token).getBody();
+            Object role = claims.get(CLAIM_ROLE);
+            return normalizeRole(role == null ? DEFAULT_ROLE : String.valueOf(role));
+        } catch (Exception e) {
+            return DEFAULT_ROLE;
+        }
     }
 
     public boolean validateToken(String token) {
@@ -85,7 +118,7 @@ public class JwtTokenProvider {
         return validateTokenType(token, TOKEN_TYPE_REFRESH);
     }
 
-    public String getTokenType(String token) {
+    private String getTokenType(String token) {
         try {
             var claims = parseClaims(token).getBody();
             Object tokenType = claims.get(CLAIM_TOKEN_TYPE);
@@ -100,6 +133,14 @@ public class JwtTokenProvider {
             return false;
         }
         return expectedType.equalsIgnoreCase(getTokenType(token));
+    }
+
+    private String normalizeRole(String role) {
+        if (role == null || role.isBlank()) {
+            return DEFAULT_ROLE;
+        }
+        String normalized = role.trim().toUpperCase();
+        return ("ADMIN".equals(normalized) || "USER".equals(normalized)) ? normalized : DEFAULT_ROLE;
     }
 
     private Jws<Claims> parseClaims(String token) {

@@ -46,18 +46,18 @@ public class TravelAgentController {
     @Transactional
     public ApiResponse<AiPlanResponse> createPlan(@Valid @RequestBody PlanRequest req, Authentication auth) {
         var user = userRepository.findByEmail(auth.getName())
-                .orElseThrow(() -> new BusinessException("User not found.", HttpStatus.NOT_FOUND));
+                .orElseThrow(() -> new BusinessException("사용자를 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
 
         requestQuotaService.assertPlanCreationAllowed(user.getId());
 
         var trimmedRequest = req.request().trim();
         var session = (req.sessionId() != null)
                 ? sessionRepository.findByIdAndUserId(req.sessionId(), user.getId())
-                    .orElseThrow(() -> new BusinessException("Chat session not found.", HttpStatus.NOT_FOUND))
+                .orElseThrow(() -> new BusinessException("채팅 세션을 찾을 수 없습니다.", HttpStatus.NOT_FOUND))
                 : sessionRepository.save(ChatSession.builder()
-                    .user(user)
-                    .sessionTitle(trimmedRequest.substring(0, Math.min(trimmedRequest.length(), 10)) + "...")
-                    .build());
+                .user(user)
+                .sessionTitle(trimmedRequest.substring(0, Math.min(trimmedRequest.length(), 10)) + "...")
+                .build());
 
         var history = messageRepository.findAllBySessionIdOrderBySentAtAsc(session.getId());
 
@@ -73,14 +73,14 @@ public class TravelAgentController {
         messageRepository.save(ChatMessage.builder()
                 .session(session)
                 .senderRole("ASSISTANT")
-                .content("요청하신 일정 초안 생성을 완료했습니다.")
+                .content("요청하신 일정 초안 생성이 완료되었습니다.")
                 .build());
 
         Long savedPlanId = planService.savePlanFromAi(user, verifiedPlan);
 
         try {
             var savedPlan = planRepository.findByIdAndUserIdWithDetails(savedPlanId, user.getId())
-                    .orElseThrow(() -> new BusinessException("Saved plan not found.", HttpStatus.NOT_FOUND));
+                    .orElseThrow(() -> new BusinessException("저장된 일정을 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
 
             Map<Integer, Itinerary> itineraryByDay = savedPlan.getItineraries().stream()
                     .collect(Collectors.toMap(Itinerary::getDayNumber, Function.identity(), (left, right) -> left));

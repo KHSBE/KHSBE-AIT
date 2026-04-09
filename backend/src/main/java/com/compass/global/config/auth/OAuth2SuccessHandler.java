@@ -1,5 +1,7 @@
 package com.compass.global.config.auth;
 
+import com.compass.domain.user.dao.UserRepository;
+import com.compass.domain.user.domain.Role;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
@@ -17,6 +19,8 @@ import java.io.IOException;
 public class OAuth2SuccessHandler extends SimpleUrlAuthenticationSuccessHandler {
 
     private final JwtTokenProvider jwtTokenProvider;
+    private final UserRepository userRepository;
+
     @Value("${app.oauth2.redirect-uri:http://localhost:5173/oauth2/redirect}")
     private String frontendRedirectUri;
 
@@ -27,11 +31,14 @@ public class OAuth2SuccessHandler extends SimpleUrlAuthenticationSuccessHandler 
         var oAuth2User = (OAuth2User) authentication.getPrincipal();
         var email = (String) oAuth2User.getAttribute("email");
 
-        // ★ 두 개의 토큰을 모두 발급!
-        var accessToken = jwtTokenProvider.createToken(email);
-        var refreshToken = jwtTokenProvider.createRefreshToken(email);
+        var user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new IOException("OAuth user not found in local repository"));
 
-        // 프론트엔드로 두 토큰을 모두 넘겨줍니다.
+        String role = user.getRoleOrDefault().name();
+
+        var accessToken = jwtTokenProvider.createToken(email, role);
+        var refreshToken = jwtTokenProvider.createRefreshToken(email, role);
+
         var targetUrl = UriComponentsBuilder.fromUriString(frontendRedirectUri)
                 .queryParam("token", accessToken)
                 .queryParam("refreshToken", refreshToken)

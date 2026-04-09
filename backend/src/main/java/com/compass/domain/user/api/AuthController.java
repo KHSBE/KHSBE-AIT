@@ -1,5 +1,6 @@
 package com.compass.domain.user.api;
 
+import com.compass.domain.user.dao.UserRepository;
 import com.compass.global.common.ApiResponse;
 import com.compass.global.config.auth.JwtTokenProvider;
 import com.compass.global.error.BusinessException;
@@ -15,6 +16,7 @@ import java.util.Map;
 public class AuthController {
 
     private final JwtTokenProvider jwtTokenProvider;
+    private final UserRepository userRepository;
 
     @PostMapping("/refresh")
     public ApiResponse<Map<String, String>> refresh(@RequestBody Map<String, String> request) {
@@ -26,7 +28,11 @@ public class AuthController {
 
         if (refreshToken != null && jwtTokenProvider.validateRefreshToken(refreshToken)) {
             String email = jwtTokenProvider.getUserEmail(refreshToken);
-            String newAccessToken = jwtTokenProvider.createToken(email);
+            String role = userRepository.findByEmail(email)
+                    .map(user -> user.getRoleOrDefault().name())
+                    .orElseGet(() -> jwtTokenProvider.getUserRole(refreshToken));
+
+            String newAccessToken = jwtTokenProvider.createToken(email, role);
             return ApiResponse.success(Map.of("accessToken", newAccessToken));
         }
 

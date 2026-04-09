@@ -1,10 +1,9 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+﻿import { useCallback, useEffect, useMemo, useState } from 'react';
 import { fetchWithAuth, buildApiUrl } from '../utils/api';
 
 export default function Admin() {
   const [checkingAdmin, setCheckingAdmin] = useState(true);
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [adminEmail, setAdminEmail] = useState('');
+  const [isAdmin, setIsAdmin] = useState(true);
   const [keyword, setKeyword] = useState('');
   const [users, setUsers] = useState([]);
   const [selectedUserId, setSelectedUserId] = useState(null);
@@ -25,33 +24,7 @@ export default function Admin() {
     return h;
   }, []);
 
-  const fetchAdminMe = useCallback(async () => {
-    setCheckingAdmin(true);
-    try {
-      const response = await fetchWithAuth(buildApiUrl('/api/admin/me'), {
-        headers
-      });
-      if (!response.ok) {
-        setIsAdmin(false);
-        return;
-      }
-
-      const data = await response.json();
-      if (data?.success && data?.data?.admin) {
-        setIsAdmin(true);
-        setAdminEmail(data.data.email || '');
-      } else {
-        setIsAdmin(false);
-      }
-    } catch {
-      setIsAdmin(false);
-    } finally {
-      setCheckingAdmin(false);
-    }
-  }, [headers]);
-
   const fetchUsers = useCallback(async () => {
-    if (!isAdmin) return;
     setIsUsersLoading(true);
     try {
       const query = keyword.trim()
@@ -59,6 +32,10 @@ export default function Admin() {
         : '?limit=50';
 
       const response = await fetchWithAuth(buildApiUrl(`/api/admin/users${query}`), { headers });
+      if (response.status === 401 || response.status === 403) {
+        setIsAdmin(false);
+        return;
+      }
       if (!response.ok) {
         throw new Error('사용자 목록 조회 실패');
       }
@@ -66,6 +43,7 @@ export default function Admin() {
       const data = await response.json();
       const list = data?.data || [];
       setUsers(list);
+      setIsAdmin(true);
 
       if (!selectedUserId && list.length > 0) {
         setSelectedUserId(list[0].userId);
@@ -75,8 +53,9 @@ export default function Admin() {
       setFeedback('사용자 목록을 가져오지 못했습니다.');
     } finally {
       setIsUsersLoading(false);
+      setCheckingAdmin(false);
     }
-  }, [headers, isAdmin, keyword, selectedUserId]);
+  }, [headers, keyword, selectedUserId]);
 
   const fetchQuota = useCallback(async (userId) => {
     if (!userId || !isAdmin) return;
@@ -103,14 +82,8 @@ export default function Admin() {
   }, [headers, isAdmin]);
 
   useEffect(() => {
-    fetchAdminMe();
-  }, [fetchAdminMe]);
-
-  useEffect(() => {
-    if (isAdmin) {
-      fetchUsers();
-    }
-  }, [isAdmin, fetchUsers]);
+    fetchUsers();
+  }, [fetchUsers]);
 
   useEffect(() => {
     if (selectedUserId) {
@@ -124,7 +97,7 @@ export default function Admin() {
     const chatLimit = Number(chatLimitInput);
 
     if (!Number.isInteger(planLimit) || planLimit < 1 || !Number.isInteger(chatLimit) || chatLimit < 1) {
-      setFeedback('쿼터 값은 1 이상의 정수만 입력할 수 있습니다.');
+      setFeedback('쿼터 값은 1 이상 정수만 입력 가능합니다.');
       return;
     }
 
@@ -173,7 +146,7 @@ export default function Admin() {
       setQuotaDetail(data.data);
       setPlanLimitInput(String(data.data.effectivePlanPerDayLimit));
       setChatLimitInput(String(data.data.effectiveChatPerDayLimit));
-      setFeedback('기본 쿼터로 초기화했습니다.');
+      setFeedback('기본값으로 초기화했습니다.');
     } catch (error) {
       console.error(error);
       setFeedback(error.message || '쿼터 초기화에 실패했습니다.');
@@ -185,7 +158,7 @@ export default function Admin() {
   if (checkingAdmin) {
     return (
       <div className="mx-auto max-w-6xl p-6">
-        <div className="rounded-2xl border border-[#d8e8f8] bg-white p-6 text-sm text-[#44617b]">관리자 권한 확인 중...</div>
+        <div className="rounded-2xl border border-[#d8e8f8] bg-white p-6 text-sm text-[#44617b]">권한 확인 중...</div>
       </div>
     );
   }
@@ -194,7 +167,7 @@ export default function Admin() {
     return (
       <div className="mx-auto max-w-6xl p-6">
         <div className="rounded-2xl border border-[#f2cfcf] bg-[#fff7f7] p-6 text-sm font-semibold text-[#9b4141]">
-          관리자 권한이 없습니다. ADMIN_EMAILS 설정과 로그인 계정을 확인해 주세요.
+          관리자 권한이 없습니다.
         </div>
       </div>
     );
@@ -204,9 +177,6 @@ export default function Admin() {
     <div className="mx-auto max-w-7xl p-4 md:p-8">
       <div className="mb-6 rounded-3xl border border-[#d6e9fa] bg-white p-5 shadow-sm">
         <h1 className="text-2xl font-black text-[#1f3550]">관리자 페이지</h1>
-        <p className="mt-2 text-sm text-[#4b6177]">
-          로그인 계정: <span className="font-semibold text-[#1f8ef1]">{adminEmail}</span>
-        </p>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-[360px_minmax(0,1fr)]">
@@ -266,8 +236,7 @@ export default function Admin() {
                     <div className="rounded-2xl border border-[#d9ebfb] p-4">
                       <p className="text-xs font-bold text-[#4f7392]">일정 생성 쿼터</p>
                       <p className="mt-2 text-sm text-[#1f3550]">
-                        기본 {quotaDetail.defaultPlanPerDayLimit} / 오버라이드{' '}
-                        {quotaDetail.overridePlanPerDayLimit ?? '-'} / 적용 {quotaDetail.effectivePlanPerDayLimit}
+                        기본 {quotaDetail.defaultPlanPerDayLimit} / 오버라이드 {quotaDetail.overridePlanPerDayLimit ?? '-'} / 적용 {quotaDetail.effectivePlanPerDayLimit}
                       </p>
                       <p className="mt-1 text-sm text-[#1f3550]">
                         사용 {quotaDetail.planPerDayUsed} · 남음 {quotaDetail.planPerDayRemaining}
@@ -277,8 +246,7 @@ export default function Admin() {
                     <div className="rounded-2xl border border-[#d9ebfb] p-4">
                       <p className="text-xs font-bold text-[#4f7392]">채팅 쿼터</p>
                       <p className="mt-2 text-sm text-[#1f3550]">
-                        기본 {quotaDetail.defaultChatPerDayLimit} / 오버라이드{' '}
-                        {quotaDetail.overrideChatPerDayLimit ?? '-'} / 적용 {quotaDetail.effectiveChatPerDayLimit}
+                        기본 {quotaDetail.defaultChatPerDayLimit} / 오버라이드 {quotaDetail.overrideChatPerDayLimit ?? '-'} / 적용 {quotaDetail.effectiveChatPerDayLimit}
                       </p>
                       <p className="mt-1 text-sm text-[#1f3550]">
                         사용 {quotaDetail.chatPerDayUsed} · 남음 {quotaDetail.chatPerDayRemaining}

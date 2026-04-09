@@ -1,5 +1,6 @@
 # Java / Gradle
 backend/.gradle/
+backend/.gradle-local/
 /.gradle-local/
 backend/build/
 backend/out/

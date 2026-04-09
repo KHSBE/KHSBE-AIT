@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+﻿import { useEffect, useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, Link, useNavigate, Navigate } from 'react-router-dom';
 import { LayoutDashboard, UserRound, LogOut, ShieldCheck } from 'lucide-react';
 import Home from './pages/Home';
@@ -40,6 +40,7 @@ function Navigation() {
           setIsAdmin(false);
           return;
         }
+
         const data = await response.json();
         setIsAdmin(!!data?.data?.admin);
       } catch {
@@ -104,6 +105,7 @@ function Navigation() {
               >
                 <UserRound size={17} />
               </Link>
+
               {isAdmin && (
                 <Link
                   to="/admin"
@@ -113,6 +115,7 @@ function Navigation() {
                   <ShieldCheck size={17} />
                 </Link>
               )}
+
               <button
                 onClick={handleLogout}
                 className="ml-1 inline-flex items-center gap-1 rounded-full border border-[#d1e5f8] bg-[#f3f9ff] px-3 py-2 text-[#3c5874] transition hover:border-[#0ea5e9] hover:text-[#0b78ac] sm:px-4"
