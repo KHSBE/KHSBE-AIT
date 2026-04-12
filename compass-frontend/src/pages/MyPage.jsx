@@ -8,6 +8,7 @@ export default function MyPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState('');
   const [deletingPlanId, setDeletingPlanId] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
 
   useEffect(() => {
     const fetchMyPlans = async () => {
@@ -33,11 +34,19 @@ export default function MyPage() {
     fetchMyPlans();
   }, []);
 
-  const deletePlan = async (planId, planTitle) => {
-    if (!window.confirm(`"${planTitle}" 일정을 삭제하시겠습니까? 삭제한 일정은 되돌릴 수 없습니다.`)) {
-      return;
-    }
+  const openDeleteModal = (plan) => {
+    setDeleteTarget(plan);
+  };
 
+  const closeDeleteModal = () => {
+    if (deletingPlanId) return;
+    setDeleteTarget(null);
+  };
+
+  const confirmDeletePlan = async () => {
+    if (!deleteTarget) return;
+
+    const planId = deleteTarget.id;
     setDeletingPlanId(planId);
     try {
       const response = await fetchWithAuth(buildApiUrl(`/api/plans/${planId}`), {
@@ -56,6 +65,7 @@ export default function MyPage() {
       }
 
       setPlans((prev) => prev.filter((plan) => plan.id !== planId));
+      setDeleteTarget(null);
     } catch (error) {
       console.error('일정 삭제 실패:', error);
       alert(error?.message || '일정 삭제 중 오류가 발생했습니다.');
@@ -149,7 +159,7 @@ export default function MyPage() {
                 <div className="px-5 pb-5">
                   <button
                     type="button"
-                    onClick={() => deletePlan(plan.id, plan.title)}
+                    onClick={() => openDeleteModal(plan)}
                     disabled={deletingPlanId === plan.id}
                     className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-[#f3caca] bg-[#fff6f6] px-4 py-2.5 text-sm font-black text-[#b54747] transition hover:border-[#ef8f8f] hover:bg-[#fff0f0] disabled:cursor-wait disabled:opacity-60"
                   >
@@ -166,6 +176,47 @@ export default function MyPage() {
           </div>
         )}
       </div>
+
+      {deleteTarget && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[#102033]/45 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-3xl border border-[#d6e9fa] bg-white p-6 shadow-[0_24px_70px_rgba(15,35,56,0.28)]">
+            <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-[#fff0f0] text-[#b54747]">
+              <Trash2 size={22} />
+            </div>
+            <h2 className="text-xl font-black text-[#1f3550]">일정을 삭제할까요?</h2>
+            <p className="mt-2 text-sm leading-relaxed text-[#4b6177]">
+              <span className="font-bold text-[#1f3550]">{deleteTarget.title}</span> 일정이 삭제됩니다.
+              삭제한 일정은 다시 복구할 수 없습니다.
+            </p>
+
+            <div className="mt-6 flex flex-col gap-2 sm:flex-row">
+              <button
+                type="button"
+                onClick={closeDeleteModal}
+                disabled={!!deletingPlanId}
+                className="flex-1 rounded-2xl border border-[#d6e9fa] bg-[#f8fcff] px-4 py-3 text-sm font-black text-[#4b6177] transition hover:bg-[#eef7ff] disabled:opacity-60"
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                onClick={confirmDeletePlan}
+                disabled={!!deletingPlanId}
+                className="flex-1 rounded-2xl bg-[#e54848] px-4 py-3 text-sm font-black text-white shadow-[0_12px_24px_rgba(229,72,72,0.24)] transition hover:bg-[#c93636] disabled:cursor-wait disabled:opacity-70"
+              >
+                {deletingPlanId === deleteTarget.id ? (
+                  <span className="inline-flex items-center gap-2">
+                    <Loader2 size={16} className="animate-spin" />
+                    삭제 중
+                  </span>
+                ) : (
+                  '삭제하기'
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
