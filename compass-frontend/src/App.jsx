@@ -9,7 +9,7 @@ import OAuth2Redirect from './pages/OAuth2Redirect';
 import MyPage from './pages/MyPage';
 import PlanDetail from './pages/PlanDetail';
 import Admin from './pages/Admin';
-import { buildApiUrl, fetchWithAuth } from './utils/api';
+import { buildApiUrl, fetchWithAuth, getAccessTokenRole } from './utils/api';
 
 function ProtectedRoute({ children }) {
   const token = localStorage.getItem('accessToken');
@@ -30,6 +30,11 @@ function Navigation() {
   useEffect(() => {
     const checkAdmin = async () => {
       if (!isLoggedIn) {
+        setIsAdmin(false);
+        return;
+      }
+
+      if (getAccessTokenRole() !== 'ADMIN') {
         setIsAdmin(false);
         return;
       }
