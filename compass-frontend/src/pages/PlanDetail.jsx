@@ -99,6 +99,32 @@ const getCurrentWeekdayLabels = () => {
   return [en, ko, ko.replace('요일', '')];
 };
 
+const getVerificationBadge = (place) => {
+  if (place?.verificationUncertain === true) {
+    return {
+      label: '장소 검증 불확실',
+      className: 'border-orange-200 bg-orange-50 text-orange-700'
+    };
+  }
+
+  const confidence = Number(place?.confidence);
+  if (Number.isFinite(confidence)) {
+    return {
+      label: `Places 검증 ${Math.round(confidence * 100)}%`,
+      className: 'border-emerald-200 bg-emerald-50 text-emerald-700'
+    };
+  }
+
+  if (place?.googlePlaceId) {
+    return {
+      label: '장소 검증됨',
+      className: 'border-emerald-200 bg-emerald-50 text-emerald-700'
+    };
+  }
+
+  return null;
+};
+
 const computeRouteSegment = async (RouteClass, originPlace, destinationPlace, travelMode) => {
   const { routes } = await RouteClass.computeRoutes({
     origin: toLatLngLiteral(originPlace),
@@ -490,7 +516,10 @@ export default function PlanDetail() {
       memo: place.memo || '',
       latitude: place.latitude ?? '',
       longitude: place.longitude ?? '',
-      googlePlaceId: place.googlePlaceId || ''
+      googlePlaceId: place.googlePlaceId || '',
+      confidence: place.confidence ?? null,
+      matchedBy: place.matchedBy || null,
+      verificationUncertain: place.verificationUncertain ?? false
     });
   };
 
@@ -538,7 +567,10 @@ export default function PlanDetail() {
       placeName: candidate.placeName,
       googlePlaceId: candidate.googlePlaceId,
       latitude: candidate.latitude,
-      longitude: candidate.longitude
+      longitude: candidate.longitude,
+      confidence: 1,
+      matchedBy: 'USER_SELECTED_PLACE',
+      verificationUncertain: false
     }));
   };
 
@@ -579,7 +611,10 @@ export default function PlanDetail() {
                 placeName: candidateName,
                 latitude: lat,
                 longitude: lng,
-                googlePlaceId: placeId
+                googlePlaceId: placeId,
+                confidence: 1,
+                matchedBy: 'USER_AUTO_REPLACE',
+                verificationUncertain: false
               }
             : item
         )
@@ -610,7 +645,10 @@ export default function PlanDetail() {
               memo: replaceTarget.memo,
               latitude: toNumberOrZero(replaceTarget.latitude),
               longitude: toNumberOrZero(replaceTarget.longitude),
-              googlePlaceId: replaceTarget.googlePlaceId
+              googlePlaceId: replaceTarget.googlePlaceId,
+              confidence: replaceTarget.googlePlaceId ? (replaceTarget.confidence ?? 1) : null,
+              matchedBy: replaceTarget.googlePlaceId ? (replaceTarget.matchedBy || 'USER_SELECTED_PLACE') : 'USER_MANUAL',
+              verificationUncertain: replaceTarget.googlePlaceId ? false : true
             }
           : item
       )
@@ -731,7 +769,10 @@ export default function PlanDetail() {
             googlePlaceId: place.googlePlaceId || null,
             latitude: place.latitude ?? 0,
             longitude: place.longitude ?? 0,
-            memo: place.memo || ''
+            memo: place.memo || '',
+            confidence: place.confidence ?? null,
+            matchedBy: place.matchedBy || null,
+            verificationUncertain: !!place.verificationUncertain
           }))
         };
 
@@ -893,6 +934,7 @@ export default function PlanDetail() {
                     const placeKey = buildPlaceKey(day.dayNumber, idx, place);
                     const focusable = day.dayNumber === selectedDay && hasValidCoordinates(place);
                     const isFocused = focusedPlaceKey === placeKey;
+                    const verificationBadge = getVerificationBadge(place);
                     return (
                   <div
                     key={placeKey}
@@ -970,6 +1012,12 @@ export default function PlanDetail() {
                           </div>
                         )}
                       </div>
+
+                      {verificationBadge && (
+                        <span className={`mt-3 inline-flex rounded-full border px-2.5 py-1 text-[11px] font-black ${verificationBadge.className}`}>
+                          {verificationBadge.label}
+                        </span>
+                      )}
 
                       {place.memo && (
                         <p className="mt-3 flex items-start gap-2 rounded-xl border border-[#d9ebfb] bg-white p-3 text-sm leading-relaxed text-[#4b6177]">

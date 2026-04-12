@@ -83,6 +83,9 @@ public class PlanCommandService {
                             .longitude(item.longitude() != null ? item.longitude() : 0.0)
                             .visitOrder(visitOrder++)
                             .memo(item.memo())
+                            .confidence(item.confidence())
+                            .matchedBy(item.matchedBy())
+                            .verificationUncertain(item.verificationUncertain() != null ? item.verificationUncertain() : false)
                             .build()
             );
         }
@@ -114,6 +117,9 @@ public class PlanCommandService {
                             .longitude(p.lng() != null ? p.lng() : 0.0)
                             .visitOrder(visitOrder++)
                             .memo(p.memo())
+                            .confidence(p.confidence())
+                            .matchedBy(p.matchedBy())
+                            .verificationUncertain(p.verificationUncertain())
                             .build());
                 }
             }

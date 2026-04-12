@@ -1,6 +1,7 @@
 package com.compass.domain.agent.api;
 
 import com.compass.domain.agent.application.PlacesVerificationService;
+import com.compass.domain.agent.application.PlanQualityValidator;
 import com.compass.domain.agent.application.RequestQuotaService;
 import com.compass.domain.agent.application.TravelAgentService;
 import com.compass.domain.agent.dao.ChatMessageRepository;
@@ -35,6 +36,7 @@ public class TravelAgentController {
 
     private final TravelAgentService agentService;
     private final PlacesVerificationService placesVerificationService;
+    private final PlanQualityValidator planQualityValidator;
     private final RequestQuotaService requestQuotaService;
     private final PlanCommandService planService;
     private final TravelPlanRepository planRepository;
@@ -61,22 +63,23 @@ public class TravelAgentController {
 
         var history = messageRepository.findAllBySessionIdOrderBySentAtAsc(session.getId());
 
+        AiPlanResponse aiRes = agentService.generateTravelPlan(user, trimmedRequest, history);
+        planQualityValidator.validate(aiRes);
+        AiPlanResponse verifiedPlan = placesVerificationService.verifyPlan(aiRes);
+
+        Long savedPlanId = planService.savePlanFromAi(user, verifiedPlan);
+
         messageRepository.save(ChatMessage.builder()
                 .session(session)
                 .senderRole("USER")
                 .content(trimmedRequest)
                 .build());
 
-        AiPlanResponse aiRes = agentService.generateTravelPlan(user, trimmedRequest, history);
-        AiPlanResponse verifiedPlan = placesVerificationService.verifyPlan(aiRes);
-
         messageRepository.save(ChatMessage.builder()
                 .session(session)
                 .senderRole("ASSISTANT")
                 .content("요청하신 일정 초안 생성이 완료되었습니다.")
                 .build());
-
-        Long savedPlanId = planService.savePlanFromAi(user, verifiedPlan);
 
         try {
             var savedPlan = planRepository.findByIdAndUserIdWithDetails(savedPlanId, user.getId())

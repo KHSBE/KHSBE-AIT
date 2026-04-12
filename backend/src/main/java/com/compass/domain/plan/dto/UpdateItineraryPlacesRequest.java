@@ -15,7 +15,19 @@ public record UpdateItineraryPlacesRequest(
             @Size(max = 255) String googlePlaceId,
             Double latitude,
             Double longitude,
-            @Size(max = 2000) String memo
+            @Size(max = 2000) String memo,
+            Double confidence,
+            @Size(max = 80) String matchedBy,
+            Boolean verificationUncertain
     ) {
+        public PlaceItem(
+                String placeName,
+                String googlePlaceId,
+                Double latitude,
+                Double longitude,
+                String memo
+        ) {
+            this(placeName, googlePlaceId, latitude, longitude, memo, null, null, false);
+        }
     }
 }

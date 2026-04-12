@@ -349,7 +349,10 @@ export default function Planner() {
       googlePlaceId: place.googlePlaceId || null,
       latitude: place.latitude ?? place.lat ?? 0,
       longitude: place.longitude ?? place.lng ?? 0,
-      memo: place.memo || ''
+      memo: place.memo || '',
+      confidence: place.confidence ?? null,
+      matchedBy: place.matchedBy || null,
+      verificationUncertain: !!place.verificationUncertain
     }));
 
     try {
