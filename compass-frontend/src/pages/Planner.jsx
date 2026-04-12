@@ -1,4 +1,5 @@
-﻿import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
+import { Link } from 'react-router-dom';
 import {
   Send,
   Bot,
@@ -13,7 +14,9 @@ import {
   Plus,
   Trash2,
   PanelLeftClose,
-  PanelLeftOpen
+  PanelLeftOpen,
+  ArrowRight,
+  MapPinned
 } from 'lucide-react';
 import { fetchWithAuth, buildApiUrl } from '../utils/api';
 
@@ -515,6 +518,21 @@ export default function Planner() {
                           <p className="mt-1 flex items-center gap-1 text-sm font-semibold text-[#2c6ea0]">
                             <BedDouble size={14} /> {msg.planData.accommodation}
                           </p>
+                        )}
+                        {msg.planData.planId && (
+                          <div className="mt-4 rounded-2xl border border-[#cde4f8] bg-[#f4faff] p-3">
+                            <p className="flex items-start gap-2 text-sm font-semibold leading-relaxed text-[#305676]">
+                              <MapPinned size={16} className="mt-0.5 shrink-0 text-[#1f8ef1]" />
+                              지도, 장소 상세, 길찾기, 일정 편집은 상세 페이지에서 확인할 수 있어요.
+                            </p>
+                            <Link
+                              to={`/plans/${msg.planData.planId}`}
+                              className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#1f8ef1] px-4 py-3 text-sm font-black text-white shadow-sm transition hover:-translate-y-0.5 hover:bg-[#1878cc] sm:w-auto"
+                            >
+                              상세 일정 보기
+                              <ArrowRight size={16} />
+                            </Link>
+                          </div>
                         )}
                       </div>
 
