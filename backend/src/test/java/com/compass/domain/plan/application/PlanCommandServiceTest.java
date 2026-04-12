@@ -63,6 +63,29 @@ class PlanCommandServiceTest {
     }
 
     @Test
+    void deletePlan_shouldDeleteOwnedPlan() {
+        User user = User.builder().id(1L).email("u1@test.com").build();
+        when(planRepository.deleteByIdAndUserId(100L, 1L)).thenReturn(1L);
+
+        planCommandService.deletePlan(user, 100L);
+
+        verify(planRepository).deleteByIdAndUserId(100L, 1L);
+    }
+
+    @Test
+    void deletePlan_shouldThrowNotFound_whenPlanDoesNotExistOrIsNotOwned() {
+        User user = User.builder().id(1L).email("u1@test.com").build();
+        when(planRepository.deleteByIdAndUserId(100L, 1L)).thenReturn(0L);
+
+        BusinessException exception = assertThrows(
+                BusinessException.class,
+                () -> planCommandService.deletePlan(user, 100L)
+        );
+
+        assertEquals(HttpStatus.NOT_FOUND, exception.getHttpStatus());
+    }
+
+    @Test
     void savePlanFromAi_shouldPersistMappedPlanAndPlaces() {
         User user = User.builder().id(1L).email("u1@test.com").build();
         AiPlanResponse response = new AiPlanResponse(

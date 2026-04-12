@@ -42,10 +42,7 @@ public class TravelPlanController {
     @DeleteMapping("/{planId}")
     public ApiResponse<Void> deletePlan(@PathVariable Long planId, Authentication authentication) {
         User user = findUser(authentication);
-        long deleted = travelPlanRepository.deleteByIdAndUserId(planId, user.getId());
-        if (deleted == 0) {
-            throw new BusinessException("해당 일정을 찾을 수 없습니다.", HttpStatus.NOT_FOUND);
-        }
+        planCommandService.deletePlan(user, planId);
         return ApiResponse.success(null);
     }
 

@@ -107,6 +107,13 @@ public class PlanCommandService {
         return plan;
     }
 
+    public void deletePlan(User user, Long planId) {
+        long deleted = planRepository.deleteByIdAndUserId(planId, user.getId());
+        if (deleted == 0) {
+            throw new BusinessException("해당 일정을 찾을 수 없습니다.", HttpStatus.NOT_FOUND);
+        }
+    }
+
     private void mapItineraries(TravelPlan plan, AiPlanResponse res) {
         if (res.itineraries() == null) {
             return;
