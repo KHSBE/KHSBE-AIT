@@ -22,6 +22,9 @@ public class Place {
 
     private String placeName;
     private String googlePlaceId;
+    private String startTime;
+    private Integer durationMinutes;
+    private String category;
     private Double latitude;  // 위도 (구글 맵 필수)
     private Double longitude; // 경도 (구글 맵 필수)
     private Integer visitOrder;

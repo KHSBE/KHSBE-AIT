@@ -1,6 +1,7 @@
 package com.compass.domain.plan.application;
 
 import com.compass.domain.agent.dto.AiPlanResponse;
+import com.compass.domain.agent.application.PlacesVerificationService;
 import com.compass.domain.plan.dao.PlaceRepository;
 import com.compass.domain.plan.dao.TravelPlanRepository;
 import com.compass.domain.plan.domain.Itinerary;
@@ -28,6 +29,10 @@ public class PlanCommandService {
     private final PlaceRepository placeRepository;
 
     public Long savePlanFromAi(User user, AiPlanResponse res) {
+        return savePlanFromAi(user, res, null);
+    }
+
+    public Long savePlanFromAi(User user, AiPlanResponse res, PlacesVerificationService.AccommodationVerification accommodationVerification) {
         try {
             if (res == null) {
                 throw new IllegalArgumentException("AI response is null");
@@ -40,7 +45,13 @@ public class PlanCommandService {
                     .user(user)
                     .title(res.title())
                     .region(res.region())
-                    .accommodation(res.accommodation())
+                    .accommodation(accommodationVerification != null ? accommodationVerification.name() : res.accommodation())
+                    .accommodationPlaceId(accommodationVerification != null ? accommodationVerification.googlePlaceId() : null)
+                    .accommodationLatitude(accommodationVerification != null ? accommodationVerification.lat() : null)
+                    .accommodationLongitude(accommodationVerification != null ? accommodationVerification.lng() : null)
+                    .accommodationAddress(accommodationVerification != null ? accommodationVerification.address() : null)
+                    .accommodationConfidence(accommodationVerification != null ? accommodationVerification.confidence() : null)
+                    .accommodationVerificationUncertain(accommodationVerification != null ? accommodationVerification.verificationUncertain() : null)
                     .startDate(LocalDate.parse(res.startDate()))
                     .endDate(LocalDate.parse(res.endDate()))
                     .build();
@@ -79,6 +90,9 @@ public class PlanCommandService {
                             .itinerary(itinerary)
                             .placeName(item.placeName().trim())
                             .googlePlaceId(item.googlePlaceId())
+                            .startTime(item.startTime())
+                            .durationMinutes(item.durationMinutes())
+                            .category(item.category())
                             .latitude(item.latitude() != null ? item.latitude() : 0.0)
                             .longitude(item.longitude() != null ? item.longitude() : 0.0)
                             .visitOrder(visitOrder++)
@@ -113,6 +127,9 @@ public class PlanCommandService {
                             .itinerary(itinerary)
                             .placeName(p.name())
                             .googlePlaceId(p.googlePlaceId())
+                            .startTime(p.startTime())
+                            .durationMinutes(p.durationMinutes())
+                            .category(p.category())
                             .latitude(p.lat() != null ? p.lat() : 0.0)
                             .longitude(p.lng() != null ? p.lng() : 0.0)
                             .visitOrder(visitOrder++)

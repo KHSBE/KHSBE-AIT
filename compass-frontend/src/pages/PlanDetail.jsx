@@ -360,6 +360,23 @@ export default function PlanDetail() {
     }));
   }, [displayItineraries, selectedDay]);
 
+  const accommodationPlace = useMemo(() => {
+    const lat = Number(plan?.accommodationLatitude);
+    const lng = Number(plan?.accommodationLongitude);
+    if (!plan?.accommodation || !Number.isFinite(lat) || !Number.isFinite(lng) || (lat === 0 && lng === 0)) {
+      return null;
+    }
+
+    return {
+      placeName: plan.accommodation,
+      googlePlaceId: plan.accommodationPlaceId || '',
+      latitude: lat,
+      longitude: lng,
+      confidence: plan.accommodationConfidence ?? null,
+      verificationUncertain: plan.accommodationVerificationUncertain ?? false
+    };
+  }, [plan]);
+
   const mapOptions = useMemo(
     () => ({
       disableDefaultUI: true,
@@ -370,9 +387,9 @@ export default function PlanDetail() {
   );
 
   const fitCurrentDayBounds = useCallback(() => {
-    if (!mapInstance || !window.google || currentDayPlaces.length === 0) return;
+    if (!mapInstance || !window.google || (currentDayPlaces.length === 0 && !accommodationPlace)) return;
 
-    if (currentDayPlaces.length === 1) {
+    if (currentDayPlaces.length === 1 && !accommodationPlace) {
       mapInstance.panTo(toLatLngLiteral(currentDayPlaces[0]));
       mapInstance.setZoom(15);
       return;
@@ -380,8 +397,9 @@ export default function PlanDetail() {
 
     const bounds = new window.google.maps.LatLngBounds();
     currentDayPlaces.forEach((place) => bounds.extend(toLatLngLiteral(place)));
+    if (accommodationPlace) bounds.extend(toLatLngLiteral(accommodationPlace));
     mapInstance.fitBounds(bounds);
-  }, [mapInstance, currentDayPlaces]);
+  }, [mapInstance, currentDayPlaces, accommodationPlace]);
 
   useEffect(() => {
     if (isMapCollapsed) return;
@@ -514,6 +532,9 @@ export default function PlanDetail() {
       placeIndex,
       placeName: place.placeName || '',
       memo: place.memo || '',
+      startTime: place.startTime || '',
+      durationMinutes: place.durationMinutes ?? null,
+      category: place.category || '',
       latitude: place.latitude ?? '',
       longitude: place.longitude ?? '',
       googlePlaceId: place.googlePlaceId || '',
@@ -643,6 +664,9 @@ export default function PlanDetail() {
               ...item,
               placeName: trimmedName,
               memo: replaceTarget.memo,
+              startTime: replaceTarget.startTime,
+              durationMinutes: replaceTarget.durationMinutes,
+              category: replaceTarget.category,
               latitude: toNumberOrZero(replaceTarget.latitude),
               longitude: toNumberOrZero(replaceTarget.longitude),
               googlePlaceId: replaceTarget.googlePlaceId,
@@ -767,6 +791,9 @@ export default function PlanDetail() {
           places: (day.places || []).map((place, index) => ({
             placeName: (place.placeName || '').trim() || `장소 ${index + 1}`,
             googlePlaceId: place.googlePlaceId || null,
+            startTime: place.startTime || null,
+            durationMinutes: place.durationMinutes ?? null,
+            category: place.category || null,
             latitude: place.latitude ?? 0,
             longitude: place.longitude ?? 0,
             memo: place.memo || '',
@@ -806,6 +833,11 @@ export default function PlanDetail() {
     detailPlace && detailState.data
       ? buildGoogleDirectionsLink(detailPlace, detailState.data)
       : null;
+  const accommodationBadge = getVerificationBadge({
+    googlePlaceId: plan?.accommodationPlaceId,
+    confidence: plan?.accommodationConfidence,
+    verificationUncertain: plan?.accommodationVerificationUncertain
+  });
 
   if (isLoading) {
     return (
@@ -913,9 +945,21 @@ export default function PlanDetail() {
             {plan.companion && <span className="rounded border border-[#d6e9fa] bg-[#f2f9ff] px-2 py-1">동행: {plan.companion}</span>}
             {plan.style && <span className="rounded border border-[#d6e9fa] bg-[#f2f9ff] px-2 py-1">스타일: {plan.style}</span>}
             {plan.accommodation && (
-              <span className="flex items-center gap-1 rounded border border-[#c8e5ff] bg-[#eaf6ff] px-2 py-1 text-[#276899]">
-                <BedDouble size={14} /> {plan.accommodation}
-              </span>
+              <>
+                <button
+                  type="button"
+                  disabled={!accommodationPlace}
+                  onClick={() => accommodationPlace && openPlaceDetail(accommodationPlace)}
+                  className="flex items-center gap-1 rounded border border-[#c8e5ff] bg-[#eaf6ff] px-2 py-1 text-[#276899] transition hover:border-[#1f8ef1] hover:text-[#1f8ef1] disabled:cursor-default disabled:hover:border-[#c8e5ff] disabled:hover:text-[#276899]"
+                >
+                  <BedDouble size={14} /> {plan.accommodation}
+                </button>
+                {accommodationBadge && (
+                  <span className={`rounded border px-2 py-1 font-bold ${accommodationBadge.className}`}>
+                    숙소 {accommodationBadge.label}
+                  </span>
+                )}
+              </>
             )}
           </div>
         </div>
@@ -1013,6 +1057,24 @@ export default function PlanDetail() {
                         )}
                       </div>
 
+                      <div className="mt-3 flex flex-wrap gap-1.5">
+                        {place.startTime && (
+                          <span className="rounded-full bg-[#eaf6ff] px-2.5 py-1 text-[11px] font-black text-[#1f8ef1]">
+                            {place.startTime}
+                          </span>
+                        )}
+                        {place.category && (
+                          <span className="rounded-full border border-[#d6e9fa] bg-white px-2.5 py-1 text-[11px] font-bold text-[#4b6177]">
+                            {place.category}
+                          </span>
+                        )}
+                        {Number.isFinite(Number(place.durationMinutes)) && (
+                          <span className="rounded-full border border-[#d6e9fa] bg-white px-2.5 py-1 text-[11px] font-bold text-[#4b6177]">
+                            약 {place.durationMinutes}분
+                          </span>
+                        )}
+                      </div>
+
                       {verificationBadge && (
                         <span className={`mt-3 inline-flex rounded-full border px-2.5 py-1 text-[11px] font-black ${verificationBadge.className}`}>
                           {verificationBadge.label}
@@ -1086,6 +1148,24 @@ export default function PlanDetail() {
             onLoad={onLoadMap}
             options={mapOptions}
           >
+            {accommodationPlace && (
+              <Marker
+                key="accommodation"
+                position={{ lat: accommodationPlace.latitude, lng: accommodationPlace.longitude }}
+                label={{ text: '숙', color: 'white', fontWeight: 'bold' }}
+                zIndex={1200}
+                icon={{
+                  path: window.google.maps.SymbolPath.CIRCLE,
+                  fillColor: '#0f766e',
+                  fillOpacity: 1,
+                  strokeColor: '#ffffff',
+                  strokeWeight: 2,
+                  scale: 13
+                }}
+                onClick={() => openPlaceDetail(accommodationPlace)}
+              />
+            )}
+
             {currentDayPlaces.map((place) => {
               const isFocused = focusedPlaceKey === place.placeKey;
               return (

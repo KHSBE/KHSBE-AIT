@@ -13,6 +13,9 @@ public record UpdateItineraryPlacesRequest(
     public record PlaceItem(
             @NotBlank @Size(max = 120) String placeName,
             @Size(max = 255) String googlePlaceId,
+            @Size(max = 20) String startTime,
+            Integer durationMinutes,
+            @Size(max = 40) String category,
             Double latitude,
             Double longitude,
             @Size(max = 2000) String memo,
@@ -27,7 +30,7 @@ public record UpdateItineraryPlacesRequest(
                 Double longitude,
                 String memo
         ) {
-            this(placeName, googlePlaceId, latitude, longitude, memo, null, null, false);
+            this(placeName, googlePlaceId, null, null, null, latitude, longitude, memo, null, null, false);
         }
     }
 }

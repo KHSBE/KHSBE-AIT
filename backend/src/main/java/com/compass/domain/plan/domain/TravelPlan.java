@@ -31,6 +31,12 @@ public class TravelPlan extends BaseEntity {
     private String companion; // 일행 (예: 친구와)
     private String style;     // 여행 테마 (예: 맛집 탐방)
     private String accommodation; // ★ 새로 추가! (예: 신라호텔, 미정)
+    private String accommodationPlaceId;
+    private Double accommodationLatitude;
+    private Double accommodationLongitude;
+    private String accommodationAddress;
+    private Double accommodationConfidence;
+    private Boolean accommodationVerificationUncertain;
 
     private LocalDate startDate;
     private LocalDate endDate;

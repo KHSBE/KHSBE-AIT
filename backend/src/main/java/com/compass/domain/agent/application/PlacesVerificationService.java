@@ -116,6 +116,86 @@ public class PlacesVerificationService {
         );
     }
 
+    public AccommodationVerification verifyAccommodation(String accommodation, String region) {
+        if (accommodation == null || accommodation.isBlank()) {
+            return null;
+        }
+
+        String trimmedAccommodation = accommodation.trim();
+        if (!enabled || apiKey == null || apiKey.isBlank()) {
+            return new AccommodationVerification(trimmedAccommodation, null, null, null, null, null, true);
+        }
+
+        List<QuerySpec> queries = List.of(
+                new QuerySpec((safe(region) + " " + trimmedAccommodation).trim(), "ACCOMMODATION_REGION_NAME"),
+                new QuerySpec((safe(region) + " " + trimmedAccommodation + " 호텔").trim(), "ACCOMMODATION_HOTEL_HINT"),
+                new QuerySpec(trimmedAccommodation, "ACCOMMODATION_NAME_ONLY")
+        );
+
+        Map<String, ScoredCandidate> bestByPlaceId = new LinkedHashMap<>();
+        AiPlanResponse.PlaceDetail requested = new AiPlanResponse.PlaceDetail(
+                trimmedAccommodation,
+                "숙소 호텔 체크인",
+                null,
+                null,
+                null
+        );
+
+        for (QuerySpec query : queries) {
+            if (query.query().isBlank()) {
+                continue;
+            }
+            List<GooglePlaceCandidate> candidates = searchCandidates(region, query.query());
+            for (GooglePlaceCandidate candidate : candidates) {
+                ScoredCandidate scored = scoreCandidate(requested, region, query.strategy(), candidate);
+                String dedupeKey = candidate.googlePlaceId() == null || candidate.googlePlaceId().isBlank()
+                        ? normalize(candidate.name()) + "@" + normalize(candidate.address())
+                        : candidate.googlePlaceId();
+                ScoredCandidate existing = bestByPlaceId.get(dedupeKey);
+                if (existing == null || scored.score() > existing.score()) {
+                    bestByPlaceId.put(dedupeKey, scored);
+                }
+            }
+        }
+
+        List<ScoredCandidate> ranked = bestByPlaceId.values().stream()
+                .sorted(Comparator.comparingInt(ScoredCandidate::score).reversed())
+                .toList();
+
+        if (ranked.isEmpty()) {
+            log.info("[PLACES-VERIFY] event=accommodation_no_candidate accommodation='{}' region='{}'", trimmedAccommodation, region);
+            return new AccommodationVerification(trimmedAccommodation, null, null, null, null, 0.0, true);
+        }
+
+        ScoredCandidate best = ranked.get(0);
+        boolean uncertain = best.score() < minScore;
+        GooglePlaceCandidate candidate = best.candidate();
+
+        log.info(
+                "[PLACES-VERIFY] event=accommodation_match accommodation='{}' region='{}' score={} threshold={} accepted={} matchedBy={}",
+                trimmedAccommodation,
+                region,
+                best.score(),
+                minScore,
+                !uncertain,
+                best.matchedBy()
+        );
+
+        if (uncertain) {
+            return new AccommodationVerification(trimmedAccommodation, null, null, null, null, toConfidence(best.score()), true);
+        }
+
+        return new AccommodationVerification(
+                candidate.name() == null || candidate.name().isBlank() ? trimmedAccommodation : candidate.name(),
+                candidate.googlePlaceId(),
+                candidate.lat(),
+                candidate.lng(),
+                candidate.address(),
+                toConfidence(best.score()),
+                false
+        );
+    }
+
     private AiPlanResponse.PlaceDetail verifyPlace(
             AiPlanResponse.PlaceDetail place,
             String region,
@@ -179,6 +259,9 @@ public class PlacesVerificationService {
         return new AiPlanResponse.PlaceDetail(
                 best.candidate().name(),
                 place.memo(),
+                place.startTime(),
+                place.durationMinutes(),
+                place.category(),
                 best.candidate().lat() != null ? best.candidate().lat() : place.lat(),
                 best.candidate().lng() != null ? best.candidate().lng() : place.lng(),
                 best.candidate().googlePlaceId() != null ? best.candidate().googlePlaceId() : place.googlePlaceId(),
@@ -442,6 +525,10 @@ public class PlacesVerificationService {
         return place.name().trim();
     }
 
+    private String safe(String value) {
+        return value == null ? "" : value.trim();
+    }
+
     private GooglePlaceCandidate toCandidate(JsonNode node) {
         String name = text(node.path("displayName"), "text", "");
         String placeId = text(node, "id", null);
@@ -539,6 +626,17 @@ public class PlacesVerificationService {
     }
 
     private record CacheEntry(long expiresAt, List<GooglePlaceCandidate> candidates) {
+    }
+
+    public record AccommodationVerification(
+            String name,
+            String googlePlaceId,
+            Double lat,
+            Double lng,
+            String address,
+            Double confidence,
+            boolean verificationUncertain
+    ) {
     }
 }
 

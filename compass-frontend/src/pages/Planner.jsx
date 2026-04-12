@@ -347,6 +347,9 @@ export default function Planner() {
     const payloadPlaces = updatedPlaces.map((place) => ({
       placeName: (place.placeName || place.name || '').trim(),
       googlePlaceId: place.googlePlaceId || null,
+      startTime: place.startTime || null,
+      durationMinutes: place.durationMinutes ?? null,
+      category: place.category || null,
       latitude: place.latitude ?? place.lat ?? 0,
       longitude: place.longitude ?? place.lng ?? 0,
       memo: place.memo || '',
@@ -557,7 +560,24 @@ export default function Planner() {
                                   )}
                                 </div>
                                 <div>
-                                  <p className="font-semibold text-[#1f3550]">{place.placeName || place.name}</p>
+                                  <div className="flex flex-wrap items-center gap-1.5">
+                                    {place.startTime && (
+                                      <span className="rounded-full bg-[#eaf6ff] px-2 py-0.5 text-[10px] font-black text-[#1f8ef1]">
+                                        {place.startTime}
+                                      </span>
+                                    )}
+                                    {place.category && (
+                                      <span className="rounded-full border border-[#d6e9fa] bg-white px-2 py-0.5 text-[10px] font-bold text-[#4b6177]">
+                                        {place.category}
+                                      </span>
+                                    )}
+                                    {Number.isFinite(Number(place.durationMinutes)) && (
+                                      <span className="rounded-full border border-[#d6e9fa] bg-white px-2 py-0.5 text-[10px] font-bold text-[#4b6177]">
+                                        {place.durationMinutes}분
+                                      </span>
+                                    )}
+                                  </div>
+                                  <p className="mt-1 font-semibold text-[#1f3550]">{place.placeName || place.name}</p>
                                   <p className="mt-0.5 text-xs text-[#4b6177]">{place.memo}</p>
                                   {place.verificationUncertain && (
                                     <div className="mt-2 space-y-1">

@@ -36,6 +36,9 @@ public record AiPlanResponse(
     public record PlaceDetail(
             String name,
             String memo,
+            String startTime,
+            Integer durationMinutes,
+            String category,
             Double lat,
             Double lng,
             String googlePlaceId,
@@ -45,13 +48,30 @@ public record AiPlanResponse(
             List<PlaceCandidate> candidates
     ) {
         public PlaceDetail(String name, String memo, Double lat, Double lng, String googlePlaceId) {
-            this(name, memo, lat, lng, googlePlaceId, null, null, false, List.of());
+            this(name, memo, null, null, null, lat, lng, googlePlaceId, null, null, false, List.of());
+        }
+
+        public PlaceDetail(
+                String name,
+                String memo,
+                Double lat,
+                Double lng,
+                String googlePlaceId,
+                Double confidence,
+                String matchedBy,
+                boolean verificationUncertain,
+                List<PlaceCandidate> candidates
+        ) {
+            this(name, memo, null, null, null, lat, lng, googlePlaceId, confidence, matchedBy, verificationUncertain, candidates);
         }
 
         public PlaceDetail withVerification(Double confidence, String matchedBy, boolean verificationUncertain, List<PlaceCandidate> candidates) {
             return new PlaceDetail(
                     name,
                     memo,
+                    startTime,
+                    durationMinutes,
+                    category,
                     lat,
                     lng,
                     googlePlaceId,

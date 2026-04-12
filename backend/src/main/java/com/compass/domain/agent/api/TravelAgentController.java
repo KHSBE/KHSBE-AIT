@@ -66,8 +66,13 @@ public class TravelAgentController {
         AiPlanResponse aiRes = agentService.generateTravelPlan(user, trimmedRequest, history);
         planQualityValidator.validate(aiRes);
         AiPlanResponse verifiedPlan = placesVerificationService.verifyPlan(aiRes);
+        PlacesVerificationService.AccommodationVerification accommodationVerification =
+                placesVerificationService.verifyAccommodation(verifiedPlan.accommodation(), verifiedPlan.region());
 
-        Long savedPlanId = planService.savePlanFromAi(user, verifiedPlan);
+        Long savedPlanId = planService.savePlanFromAi(user, verifiedPlan, accommodationVerification);
+        String responseAccommodation = accommodationVerification != null
+                ? accommodationVerification.name()
+                : verifiedPlan.accommodation();
 
         messageRepository.save(ChatMessage.builder()
                 .session(session)
@@ -107,7 +112,7 @@ public class TravelAgentController {
                     savedPlanId,
                     verifiedPlan.title(),
                     verifiedPlan.region(),
-                    verifiedPlan.accommodation(),
+                    responseAccommodation,
                     verifiedPlan.startDate(),
                     verifiedPlan.endDate(),
                     enrichedDays
@@ -121,7 +126,7 @@ public class TravelAgentController {
                     savedPlanId,
                     verifiedPlan.title(),
                     verifiedPlan.region(),
-                    verifiedPlan.accommodation(),
+                    responseAccommodation,
                     verifiedPlan.startDate(),
                     verifiedPlan.endDate(),
                     verifiedPlan.itineraries()
