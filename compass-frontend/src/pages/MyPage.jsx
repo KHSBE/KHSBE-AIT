@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Calendar, MapPin, Loader2, Compass, Plus, AlertCircle } from 'lucide-react';
+import { Calendar, MapPin, Loader2, Compass, Plus, AlertCircle, Trash2 } from 'lucide-react';
 import { fetchWithAuth, buildApiUrl } from '../utils/api';
 
 export default function MyPage() {
   const [plans, setPlans] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState('');
+  const [deletingPlanId, setDeletingPlanId] = useState(null);
 
   useEffect(() => {
     const fetchMyPlans = async () => {
@@ -31,6 +32,37 @@ export default function MyPage() {
 
     fetchMyPlans();
   }, []);
+
+  const deletePlan = async (planId, planTitle) => {
+    if (!window.confirm(`"${planTitle}" 일정을 삭제하시겠습니까? 삭제한 일정은 되돌릴 수 없습니다.`)) {
+      return;
+    }
+
+    setDeletingPlanId(planId);
+    try {
+      const response = await fetchWithAuth(buildApiUrl(`/api/plans/${planId}`), {
+        method: 'DELETE'
+      });
+
+      if (!response.ok) {
+        let message = '일정 삭제에 실패했습니다.';
+        try {
+          const errorData = await response.json();
+          message = errorData?.message || errorData?.error || message;
+        } catch {
+          // ignore parse error
+        }
+        throw new Error(message);
+      }
+
+      setPlans((prev) => prev.filter((plan) => plan.id !== planId));
+    } catch (error) {
+      console.error('일정 삭제 실패:', error);
+      alert(error?.message || '일정 삭제 중 오류가 발생했습니다.');
+    } finally {
+      setDeletingPlanId(null);
+    }
+  };
 
   if (isLoading) {
     return (
@@ -89,30 +121,47 @@ export default function MyPage() {
         ) : (
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
             {plans.map((plan) => (
-              <Link
-                to={`/plans/${plan.id}`}
+              <article
                 key={plan.id}
                 className="group overflow-hidden rounded-3xl border border-[#d6e9fa] bg-white shadow-[0_12px_34px_rgba(68,130,189,0.12)] transition-all hover:-translate-y-1.5 hover:shadow-[0_18px_42px_rgba(68,130,189,0.18)]"
               >
-                <div className="relative flex h-40 items-center justify-center overflow-hidden bg-gradient-to-br from-[#1f8ef1] to-[#0ea5e9]">
-                  <div className="absolute inset-0 bg-black/10 transition duration-300 group-hover:bg-black/0" />
-                  <span className="text-3xl font-black tracking-[0.08em] text-white drop-shadow-md transition duration-500 group-hover:scale-110">
-                    {plan.region}
-                  </span>
-                </div>
-
-                <div className="p-5">
-                  <h3 className="mb-3 truncate text-lg font-bold text-[#1f3550]">{plan.title}</h3>
-                  <div className="space-y-2 text-sm font-medium text-[#4b6177]">
-                    <p className="flex items-center gap-2.5 rounded-lg bg-[#f2f9ff] p-2">
-                      <MapPin size={16} className="text-[#1f8ef1]" /> {plan.region}
-                    </p>
-                    <p className="flex items-center gap-2.5 rounded-lg bg-[#f2f9ff] p-2">
-                      <Calendar size={16} className="text-[#1f8ef1]" /> {plan.startDate} ~ {plan.endDate}
-                    </p>
+                <Link to={`/plans/${plan.id}`} className="block">
+                  <div className="relative flex h-40 items-center justify-center overflow-hidden bg-gradient-to-br from-[#1f8ef1] to-[#0ea5e9]">
+                    <div className="absolute inset-0 bg-black/10 transition duration-300 group-hover:bg-black/0" />
+                    <span className="text-3xl font-black tracking-[0.08em] text-white drop-shadow-md transition duration-500 group-hover:scale-110">
+                      {plan.region}
+                    </span>
                   </div>
+
+                  <div className="p-5 pb-3">
+                    <h3 className="mb-3 truncate text-lg font-bold text-[#1f3550]">{plan.title}</h3>
+                    <div className="space-y-2 text-sm font-medium text-[#4b6177]">
+                      <p className="flex items-center gap-2.5 rounded-lg bg-[#f2f9ff] p-2">
+                        <MapPin size={16} className="text-[#1f8ef1]" /> {plan.region}
+                      </p>
+                      <p className="flex items-center gap-2.5 rounded-lg bg-[#f2f9ff] p-2">
+                        <Calendar size={16} className="text-[#1f8ef1]" /> {plan.startDate} ~ {plan.endDate}
+                      </p>
+                    </div>
+                  </div>
+                </Link>
+
+                <div className="px-5 pb-5">
+                  <button
+                    type="button"
+                    onClick={() => deletePlan(plan.id, plan.title)}
+                    disabled={deletingPlanId === plan.id}
+                    className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-[#f3caca] bg-[#fff6f6] px-4 py-2.5 text-sm font-black text-[#b54747] transition hover:border-[#ef8f8f] hover:bg-[#fff0f0] disabled:cursor-wait disabled:opacity-60"
+                  >
+                    {deletingPlanId === plan.id ? (
+                      <Loader2 size={16} className="animate-spin" />
+                    ) : (
+                      <Trash2 size={16} />
+                    )}
+                    일정 삭제
+                  </button>
                 </div>
-              </Link>
+              </article>
             ))}
           </div>
         )}
