@@ -1,12 +1,11 @@
-import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { useParams, Link } from "react-router-dom";
 import {
   MapPin,
   Calendar,
   ChevronLeft,
   Loader2,
   BedDouble,
-  Bot,
   PencilLine,
   Save,
   X,
@@ -14,72 +13,95 @@ import {
   Trash2,
   RefreshCcw,
   Search,
-  Sparkles
-} from 'lucide-react';
-import { GoogleMap, useJsApiLoader, Marker, Polyline } from '@react-google-maps/api';
-import { fetchWithAuth, buildApiUrl } from '../utils/api';
-import { searchPlacesNew, placeDetailNew } from '../utils/places';
+  Sparkles,
+} from "lucide-react";
+import {
+  GoogleMap,
+  useJsApiLoader,
+  Marker,
+  Polyline,
+} from "@react-google-maps/api";
+import { fetchWithAuth, buildApiUrl } from "../utils/api";
+import { searchPlacesNew, placeDetailNew } from "../utils/places";
+import "./PlanDetail.css";
 
 const isGoogleMapsSource = (value) => {
-  try { const u = new URL(value); return u.protocol === 'https:' && ['maps.google.com', 'www.google.com', 'google.com'].includes(u.hostname); }
-  catch { return false; }
-};const GOOGLE_MAP_LIBRARIES = ['places'];
-
+  try {
+    const u = new URL(value);
+    return (
+      u.protocol === "https:" &&
+      ["maps.google.com", "www.google.com", "google.com"].includes(u.hostname)
+    );
+  } catch {
+    return false;
+  }
+};
+const GOOGLE_MAP_LIBRARIES = ["places"];
 
 const MAP_SIMPLIFIED_STYLES = [
-  { featureType: 'poi.business', stylers: [{ visibility: 'off' }] },
-  { featureType: 'poi.attraction', stylers: [{ visibility: 'off' }] },
-  { featureType: 'transit', stylers: [{ visibility: 'off' }] },
-  { featureType: 'road', elementType: 'labels.icon', stylers: [{ visibility: 'off' }] },
-  { featureType: 'administrative.neighborhood', stylers: [{ visibility: 'off' }] }
+  { featureType: "poi.business", stylers: [{ visibility: "off" }] },
+  { featureType: "poi.attraction", stylers: [{ visibility: "off" }] },
+  { featureType: "transit", stylers: [{ visibility: "off" }] },
+  {
+    featureType: "road",
+    elementType: "labels.icon",
+    stylers: [{ visibility: "off" }],
+  },
+  {
+    featureType: "administrative.neighborhood",
+    stylers: [{ visibility: "off" }],
+  },
 ];
 
 const WEEKDAY_EN_TO_KO = {
-  monday: '월요일',
-  tuesday: '화요일',
-  wednesday: '수요일',
-  thursday: '목요일',
-  friday: '금요일',
-  saturday: '토요일',
-  sunday: '일요일'
+  monday: "월요일",
+  tuesday: "화요일",
+  wednesday: "수요일",
+  thursday: "목요일",
+  friday: "금요일",
+  saturday: "토요일",
+  sunday: "일요일",
 };
 
 const BUSINESS_STATUS_KO = {
-  OPERATIONAL: '정상 영업',
-  CLOSED_TEMPORARILY: '임시 휴업',
-  CLOSED_PERMANENTLY: '영구 폐업'
+  OPERATIONAL: "정상 영업",
+  CLOSED_TEMPORARILY: "임시 휴업",
+  CLOSED_PERMANENTLY: "영구 폐업",
 };
 
 const cloneItineraries = (itineraries = []) =>
   itineraries.map((day) => ({
     ...day,
-    places: (day.places || []).map((place) => ({ ...place }))
+    places: (day.places || []).map((place) => ({ ...place })),
   }));
 
 const hasValidCoordinates = (place) => {
   const lat = Number(place.latitude);
   const lng = Number(place.longitude);
-  return Number.isFinite(lat) && Number.isFinite(lng) && (lat !== 0 || lng !== 0);
+  return (
+    Number.isFinite(lat) && Number.isFinite(lng) && (lat !== 0 || lng !== 0)
+  );
 };
 
 const buildPlaceKey = (dayNumber, index, place) =>
-  `${dayNumber}-${place.id ?? place.googlePlaceId ?? place.placeName ?? 'place'}-${index}`;
+  `${dayNumber}-${place.id ?? place.googlePlaceId ?? place.placeName ?? "place"}-${index}`;
 
 const toLatLngLiteral = (place) => ({
   lat: Number(place.latitude),
-  lng: Number(place.longitude)
+  lng: Number(place.longitude),
 });
 
 const isMobileViewport = () =>
-  typeof window !== 'undefined' && window.matchMedia('(max-width: 1023px)').matches;
+  typeof window !== "undefined" &&
+  window.matchMedia("(max-width: 1023px)").matches;
 
 const localizeBusinessStatus = (status) => {
-  if (!status) return '정보 없음';
+  if (!status) return "정보 없음";
   return BUSINESS_STATUS_KO[status] || status;
 };
 
 const localizeWeekdayOpeningLine = (line) => {
-  if (!line) return '';
+  if (!line) return "";
   const match = line.match(/^([A-Za-z]+)(\s*:\s*)(.*)$/);
   if (!match) return line;
 
@@ -91,23 +113,50 @@ const localizeWeekdayOpeningLine = (line) => {
 
 const getCurrentWeekdayLabels = () => {
   const weekdayIndex = new Date().getDay(); // 0: Sunday
-  const enDays = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
-  const koDays = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일'];
+  const enDays = [
+    "sunday",
+    "monday",
+    "tuesday",
+    "wednesday",
+    "thursday",
+    "friday",
+    "saturday",
+  ];
+  const koDays = [
+    "일요일",
+    "월요일",
+    "화요일",
+    "수요일",
+    "목요일",
+    "금요일",
+    "토요일",
+  ];
   const en = enDays[weekdayIndex];
   const ko = koDays[weekdayIndex];
-  return [en, ko, ko.replace('요일', '')];
+  return [en, ko, ko.replace("요일", "")];
 };
 
 const getVerificationBadge = (place, editing = false) => {
-  if (editing && place?.matchedBy?.startsWith("USER_")) return { label: "저장 시 장소 확인", className: "bg-sky-50 text-sky-700" };
-  if (place?.verificationUncertain === true) return { label: '확인 필요', className: 'bg-orange-50 text-orange-700' };
-  if (place?.googlePlaceId && place?.matchedBy && place.matchedBy !== 'UNVERIFIED') return {
-    label: place.matchedBy === 'GOOGLE_MAPS_GROUNDING' ? 'Maps 출처 · 장소 확인' : '장소 확인', className: 'bg-emerald-50 text-emerald-700'
-  };
-  return { label: '미검증', className: 'bg-slate-100 text-slate-500' };
+  if (editing && place?.matchedBy?.startsWith("USER_"))
+    return { label: "저장 시 장소 확인", className: "bg-sky-50 text-sky-700" };
+  if (place?.verificationUncertain === true)
+    return { label: "확인 필요", className: "bg-orange-50 text-orange-700" };
+  if (
+    place?.googlePlaceId &&
+    place?.matchedBy &&
+    place.matchedBy !== "UNVERIFIED"
+  )
+    return {
+      label:
+        place.matchedBy === "GOOGLE_MAPS_GROUNDING"
+          ? "Maps 출처 · 장소 확인"
+          : "장소 확인",
+      className: "bg-emerald-50 text-emerald-700",
+    };
+  return { label: "미검증", className: "bg-slate-100 text-slate-500" };
 };
 const toNumberOrZero = (value) => {
-  if (value === '' || value === null || value === undefined) return 0;
+  if (value === "" || value === null || value === undefined) return 0;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
 };
@@ -115,31 +164,37 @@ const toNumberOrZero = (value) => {
 const buildGoogleDirectionsLink = (place, detailData) => {
   const lat = Number(place?.latitude);
   const lng = Number(place?.longitude);
-  const hasCoordinates = Number.isFinite(lat) && Number.isFinite(lng) && (lat !== 0 || lng !== 0);
-  const destinationText = (detailData?.address || place?.placeName || '').trim();
+  const hasCoordinates =
+    Number.isFinite(lat) && Number.isFinite(lng) && (lat !== 0 || lng !== 0);
+  const destinationText = (
+    detailData?.address ||
+    place?.placeName ||
+    ""
+  ).trim();
 
   const params = new URLSearchParams({
-    api: '1',
-    travelmode: 'driving'
+    api: "1",
+    travelmode: "driving",
   });
 
   if (hasCoordinates) {
-    params.set('destination', `${lat},${lng}`);
+    params.set("destination", `${lat},${lng}`);
   } else if (destinationText) {
-    params.set('destination', destinationText);
+    params.set("destination", destinationText);
   } else {
     return null;
   }
 
   if (detailData?.placeId) {
-    params.set('destination_place_id', detailData.placeId);
+    params.set("destination_place_id", detailData.placeId);
   }
 
   return `https://www.google.com/maps/dir/?${params.toString()}`;
 };
 
 const searchPlaces = (...args) => searchPlacesNew(args[1]);
-const findSinglePlace = async (...args) => (await searchPlacesNew(args[1]))[0] || null;
+const findSinglePlace = async (...args) =>
+  (await searchPlacesNew(args[1]))[0] || null;
 const getPlaceDetail = (...args) => placeDetailNew(args[1]);
 export default function PlanDetail() {
   const { id } = useParams();
@@ -157,23 +212,26 @@ export default function PlanDetail() {
   const [replaceCandidates, setReplaceCandidates] = useState([]);
   const [isSearchingPlace, setIsSearchingPlace] = useState(false);
   const [autoReplaceKey, setAutoReplaceKey] = useState(null);
-  const [replaceSearchError, setReplaceSearchError] = useState('');
+  const [replaceSearchError, setReplaceSearchError] = useState("");
   const [detailPlace, setDetailPlace] = useState(null);
-  const [detailState, setDetailState] = useState({ loading: false, error: '', data: null });
+  const [detailState, setDetailState] = useState({
+    loading: false,
+    error: "",
+    data: null,
+  });
   const [focusedPlaceKey, setFocusedPlaceKey] = useState(null);
   const [routePath, setRoutePath] = useState([]);
 
-
   const [isMapCollapsed, setIsMapCollapsed] = useState(false);
-  const [mobileView, setMobileView] = useState('plan');
+  const [mobileView, setMobileView] = useState("plan");
   const placesServiceRef = useRef(null);
 
   const { isLoaded } = useJsApiLoader({
-    id: 'google-map-script',
+    id: "google-map-script",
     googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY,
     libraries: GOOGLE_MAP_LIBRARIES,
-    language: 'ko',
-    region: 'KR'
+    language: "ko",
+    region: "KR",
   });
 
   useEffect(() => {
@@ -187,11 +245,11 @@ export default function PlanDetail() {
     setIsLoading(true);
     try {
       const response = await fetchWithAuth(buildApiUrl(`/api/plans/${id}`), {
-        headers: { 'Content-Type': 'application/json' }
+        headers: { "Content-Type": "application/json" },
       });
 
       if (!response.ok) {
-        throw new Error('일정 상세 조회 실패');
+        throw new Error("일정 상세 조회 실패");
       }
 
       const result = await response.json();
@@ -201,12 +259,14 @@ export default function PlanDetail() {
 
       if (loadedPlan?.itineraries?.length) {
         setSelectedDay((prevDay) => {
-          const hasSelectedDay = loadedPlan.itineraries.some((item) => item.dayNumber === prevDay);
+          const hasSelectedDay = loadedPlan.itineraries.some(
+            (item) => item.dayNumber === prevDay,
+          );
           return hasSelectedDay ? prevDay : loadedPlan.itineraries[0].dayNumber;
         });
       }
     } catch (error) {
-      console.error('일정 상세 조회 실패:', error);
+      console.error("일정 상세 조회 실패:", error);
     } finally {
       setIsLoading(false);
     }
@@ -218,41 +278,48 @@ export default function PlanDetail() {
 
   const displayItineraries = useMemo(() => {
     if (!plan) return [];
-    return isEditMode ? editableItineraries : (plan.itineraries || []);
+    return isEditMode ? editableItineraries : plan.itineraries || [];
   }, [plan, isEditMode, editableItineraries]);
 
   const currentDayPlaces = useMemo(() => {
     if (!displayItineraries.length) return [];
-    const dayData = displayItineraries.find((item) => item.dayNumber === selectedDay);
+    const dayData = displayItineraries.find(
+      (item) => item.dayNumber === selectedDay,
+    );
     const placesWithIndex = (dayData?.places || []).map((place, index) => ({
       ...place,
       sourceIndex: index,
-      placeKey: buildPlaceKey(selectedDay, index, place)
+      placeKey: buildPlaceKey(selectedDay, index, place),
     }));
 
     const withCoordinates = placesWithIndex.filter(hasValidCoordinates);
-    return withCoordinates.map((place, mapIndex) => ({
+    return withCoordinates.map((place) => ({
       ...place,
       latitude: Number(place.latitude),
       longitude: Number(place.longitude),
-      markerOrder: mapIndex + 1
+      markerOrder: place.sourceIndex + 1,
     }));
   }, [displayItineraries, selectedDay]);
 
   const accommodationPlace = useMemo(() => {
     const lat = Number(plan?.accommodationLatitude);
     const lng = Number(plan?.accommodationLongitude);
-    if (!plan?.accommodation || !Number.isFinite(lat) || !Number.isFinite(lng) || (lat === 0 && lng === 0)) {
+    if (
+      !plan?.accommodation ||
+      !Number.isFinite(lat) ||
+      !Number.isFinite(lng) ||
+      (lat === 0 && lng === 0)
+    ) {
       return null;
     }
 
     return {
       placeName: plan.accommodation,
-      googlePlaceId: plan.accommodationPlaceId || '',
+      googlePlaceId: plan.accommodationPlaceId || "",
       latitude: lat,
       longitude: lng,
       confidence: plan.accommodationConfidence ?? null,
-      verificationUncertain: plan.accommodationVerificationUncertain ?? false
+      verificationUncertain: plan.accommodationVerificationUncertain ?? false,
     };
   }, [plan]);
 
@@ -260,13 +327,18 @@ export default function PlanDetail() {
     () => ({
       disableDefaultUI: true,
       zoomControl: true,
-      styles: MAP_SIMPLIFIED_STYLES
+      styles: MAP_SIMPLIFIED_STYLES,
     }),
-    []
+    [],
   );
 
   const fitCurrentDayBounds = useCallback(() => {
-    if (!mapInstance || !window.google || (currentDayPlaces.length === 0 && !accommodationPlace)) return;
+    if (
+      !mapInstance ||
+      !window.google ||
+      (currentDayPlaces.length === 0 && !accommodationPlace)
+    )
+      return;
 
     if (currentDayPlaces.length === 1 && !accommodationPlace) {
       mapInstance.panTo(toLatLngLiteral(currentDayPlaces[0]));
@@ -287,7 +359,9 @@ export default function PlanDetail() {
 
   useEffect(() => {
     if (!mapInstance || !focusedPlaceKey) return;
-    const target = currentDayPlaces.find((place) => place.placeKey === focusedPlaceKey);
+    const target = currentDayPlaces.find(
+      (place) => place.placeKey === focusedPlaceKey,
+    );
     if (!target) return;
 
     mapInstance.panTo({ lat: target.latitude, lng: target.longitude });
@@ -297,7 +371,9 @@ export default function PlanDetail() {
     setFocusedPlaceKey(null);
   }, [selectedDay]);
 
-  useEffect(() => { setRoutePath(currentDayPlaces.map(toLatLngLiteral)); }, [currentDayPlaces]);
+  useEffect(() => {
+    setRoutePath(currentDayPlaces.map(toLatLngLiteral));
+  }, [currentDayPlaces]);
 
   const onLoadMap = useCallback((map) => {
     setMapInstance(map);
@@ -308,8 +384,8 @@ export default function PlanDetail() {
       prev.map((day) =>
         day.dayNumber === dayNumber
           ? { ...day, places: updater([...(day.places || [])]) }
-          : day
-      )
+          : day,
+      ),
     );
   }, []);
 
@@ -335,26 +411,28 @@ export default function PlanDetail() {
   };
 
   const removePlace = (dayNumber, placeIndex) => {
-    updatePlaces(dayNumber, (places) => places.filter((_, idx) => idx !== placeIndex));
+    updatePlaces(dayNumber, (places) =>
+      places.filter((_, idx) => idx !== placeIndex),
+    );
   };
 
   const openReplaceModal = (dayNumber, placeIndex, place) => {
     setReplaceCandidates([]);
-    setReplaceSearchError('');
+    setReplaceSearchError("");
     setReplaceTarget({
       dayNumber,
       placeIndex,
-      placeName: place.placeName || '',
-      memo: place.memo || '',
-      startTime: place.startTime || '',
+      placeName: place.placeName || "",
+      memo: place.memo || "",
+      startTime: place.startTime || "",
       durationMinutes: place.durationMinutes ?? null,
-      category: place.category || '',
-      latitude: place.latitude ?? '',
-      longitude: place.longitude ?? '',
-      googlePlaceId: place.googlePlaceId || '',
+      category: place.category || "",
+      latitude: place.latitude ?? "",
+      longitude: place.longitude ?? "",
+      googlePlaceId: place.googlePlaceId || "",
       confidence: place.confidence ?? null,
       matchedBy: place.matchedBy || null,
-      verificationUncertain: place.verificationUncertain ?? false
+      verificationUncertain: place.verificationUncertain ?? false,
     });
   };
 
@@ -362,35 +440,39 @@ export default function PlanDetail() {
     if (!replaceTarget) return;
     const service = placesServiceRef.current;
     if (!service) {
-      setReplaceSearchError('Google Places가 아직 준비되지 않았습니다. 잠시 후 다시 시도해 주세요.');
+      setReplaceSearchError(
+        "Google Places가 아직 준비되지 않았습니다. 잠시 후 다시 시도해 주세요.",
+      );
       return;
     }
 
-    const query = `${replaceTarget.placeName} ${plan?.region || ''}`.trim();
+    const query = `${replaceTarget.placeName} ${plan?.region || ""}`.trim();
     if (!query) {
-      setReplaceSearchError('검색어를 입력해 주세요.');
+      setReplaceSearchError("검색어를 입력해 주세요.");
       return;
     }
 
     setIsSearchingPlace(true);
-    setReplaceSearchError('');
+    setReplaceSearchError("");
 
     try {
       const results = await searchPlaces(service, query);
       setReplaceCandidates(
         results.slice(0, 6).map((item) => ({
-          placeName: item.name || '',
-          googlePlaceId: item.place_id || '',
+          placeName: item.name || "",
+          googlePlaceId: item.place_id || "",
           latitude: item.geometry?.location?.lat?.() ?? 0,
           longitude: item.geometry?.location?.lng?.() ?? 0,
-          address: item.formatted_address || '',
+          address: item.formatted_address || "",
           rating: item.rating ?? null,
-          userRatingsTotal: item.user_ratings_total ?? null
-        }))
+          userRatingsTotal: item.user_ratings_total ?? null,
+        })),
       );
     } catch (error) {
-      console.error('Places 검색 실패:', error);
-      setReplaceSearchError('Places 검색에 실패했습니다. 잠시 후 다시 시도해 주세요.');
+      console.error("Places 검색 실패:", error);
+      setReplaceSearchError(
+        "Places 검색에 실패했습니다. 잠시 후 다시 시도해 주세요.",
+      );
     } finally {
       setIsSearchingPlace(false);
     }
@@ -404,15 +486,17 @@ export default function PlanDetail() {
       latitude: candidate.latitude,
       longitude: candidate.longitude,
       confidence: null,
-      matchedBy: 'USER_SELECTED_PLACE',
-      verificationUncertain: false
+      matchedBy: "USER_SELECTED_PLACE",
+      verificationUncertain: false,
     }));
   };
 
   const autoReplacePlace = async (dayNumber, placeIndex, place) => {
     const service = placesServiceRef.current;
     if (!service) {
-      alert('Google Places가 아직 준비되지 않았습니다. 잠시 후 다시 시도해 주세요.');
+      alert(
+        "Google Places가 아직 준비되지 않았습니다. 잠시 후 다시 시도해 주세요.",
+      );
       return;
     }
 
@@ -420,15 +504,15 @@ export default function PlanDetail() {
     setAutoReplaceKey(actionKey);
 
     try {
-      const query = `${place.placeName || ''} ${plan?.region || ''}`.trim();
+      const query = `${place.placeName || ""} ${plan?.region || ""}`.trim();
       if (!query) {
-        alert('자동 대체를 위한 장소명이 없습니다.');
+        alert("자동 대체를 위한 장소명이 없습니다.");
         return;
       }
 
       const results = await searchPlaces(service, query);
       if (!results.length) {
-        alert('자동 대체 후보를 찾지 못했습니다. 직접 교체를 사용해 주세요.');
+        alert("자동 대체 후보를 찾지 못했습니다. 직접 교체를 사용해 주세요.");
         return;
       }
 
@@ -436,7 +520,7 @@ export default function PlanDetail() {
       const candidateName = candidate.name || place.placeName;
       const lat = candidate.geometry?.location?.lat?.() ?? place.latitude ?? 0;
       const lng = candidate.geometry?.location?.lng?.() ?? place.longitude ?? 0;
-      const placeId = candidate.place_id || place.googlePlaceId || '';
+      const placeId = candidate.place_id || place.googlePlaceId || "";
 
       updatePlaces(dayNumber, (places) =>
         places.map((item, idx) =>
@@ -448,16 +532,17 @@ export default function PlanDetail() {
                 longitude: lng,
                 googlePlaceId: placeId,
                 confidence: null,
-                sourceUri: null, sourceTitle: null,
-                matchedBy: 'USER_AUTO_REPLACE',
-                verificationUncertain: false
+                sourceUri: null,
+                sourceTitle: null,
+                matchedBy: "USER_AUTO_REPLACE",
+                verificationUncertain: false,
               }
-            : item
-        )
+            : item,
+        ),
       );
     } catch (error) {
-      console.error('자동 대체 실패:', error);
-      alert('자동 대체 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.');
+      console.error("자동 대체 실패:", error);
+      alert("자동 대체 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.");
     } finally {
       setAutoReplaceKey(null);
     }
@@ -466,10 +551,13 @@ export default function PlanDetail() {
   const applyReplace = () => {
     if (!replaceTarget) return;
 
-    if (!replaceTarget.googlePlaceId) { setReplaceSearchError('검색 결과에서 장소를 선택해 주세요.'); return; }
+    if (!replaceTarget.googlePlaceId) {
+      setReplaceSearchError("검색 결과에서 장소를 선택해 주세요.");
+      return;
+    }
     const trimmedName = replaceTarget.placeName.trim();
     if (!trimmedName) {
-      alert('장소명은 비워둘 수 없습니다.');
+      alert("장소명은 비워둘 수 없습니다.");
       return;
     }
 
@@ -487,74 +575,97 @@ export default function PlanDetail() {
               longitude: toNumberOrZero(replaceTarget.longitude),
               googlePlaceId: replaceTarget.googlePlaceId,
               confidence: null,
-              sourceUri: null, sourceTitle: null,
-              matchedBy: replaceTarget.googlePlaceId ? (replaceTarget.matchedBy || 'USER_SELECTED_PLACE') : 'USER_MANUAL',
-              verificationUncertain: replaceTarget.googlePlaceId ? false : true
+              sourceUri: null,
+              sourceTitle: null,
+              matchedBy: replaceTarget.googlePlaceId
+                ? replaceTarget.matchedBy || "USER_SELECTED_PLACE"
+                : "USER_MANUAL",
+              verificationUncertain: replaceTarget.googlePlaceId ? false : true,
             }
-          : item
-      )
+          : item,
+      ),
     );
 
     setReplaceTarget(null);
     setReplaceCandidates([]);
-    setReplaceSearchError('');
+    setReplaceSearchError("");
   };
 
-  const loadPlaceDetail = useCallback(async (place) => {
-    const service = placesServiceRef.current;
-    if (!service) {
-      setDetailState({ loading: false, error: 'Google Places가 아직 준비되지 않았습니다.', data: null });
-      return;
-    }
-
-    setDetailState({ loading: true, error: '', data: null });
-
-    try {
-      let placeId = place.googlePlaceId;
-      if (!placeId) {
-        const found = await findSinglePlace(service, `${place.placeName} ${plan?.region || ''}`.trim());
-        placeId = found?.place_id;
-      }
-
-      if (!placeId) {
-        setDetailState({ loading: false, error: '해당 장소의 Google 상세 정보를 찾지 못했습니다.', data: null });
+  const loadPlaceDetail = useCallback(
+    async (place) => {
+      const service = placesServiceRef.current;
+      if (!service) {
+        setDetailState({
+          loading: false,
+          error: "Google Places가 아직 준비되지 않았습니다.",
+          data: null,
+        });
         return;
       }
 
-      const detail = await getPlaceDetail(service, placeId);
-      setDetailState({
-        loading: false,
-        error: '',
-        data: {
-          placeId: detail.place_id || placeId,
-          name: detail.name || place.placeName,
-          address: detail.formatted_address || '',
-          rating: detail.rating ?? null,
-          userRatingsTotal: detail.user_ratings_total ?? null,
-          openingHours: detail.opening_hours?.weekday_text || [],
-          openingHoursLocalized: (detail.opening_hours?.weekday_text || []).map(localizeWeekdayOpeningLine),
-          isOpenNow:
-            typeof detail.opening_hours?.isOpen === 'function'
-              ? detail.opening_hours.isOpen()
-              : null,
-          phone: detail.formatted_phone_number || '',
-          website: detail.website || '',
-          mapUrl: detail.url || '',
-          businessStatus: detail.business_status || '',
-          businessStatusLabel: localizeBusinessStatus(detail.business_status),
-          reviews: (detail.reviews || []).slice(0, 3).map((review) => ({
-            author: review.author_name || '사용자',
-            authorUrl: review.author_url,
-            rating: review.rating ?? null,
-            text: review.text || ''
-          }))
+      setDetailState({ loading: true, error: "", data: null });
+
+      try {
+        let placeId = place.googlePlaceId;
+        if (!placeId) {
+          const found = await findSinglePlace(
+            service,
+            `${place.placeName} ${plan?.region || ""}`.trim(),
+          );
+          placeId = found?.place_id;
         }
-      });
-    } catch (error) {
-      console.error('Places 상세 조회 실패:', error);
-      setDetailState({ loading: false, error: '장소 상세 조회에 실패했습니다.', data: null });
-    }
-  }, [plan?.region]);
+
+        if (!placeId) {
+          setDetailState({
+            loading: false,
+            error: "해당 장소의 Google 상세 정보를 찾지 못했습니다.",
+            data: null,
+          });
+          return;
+        }
+
+        const detail = await getPlaceDetail(service, placeId);
+        setDetailState({
+          loading: false,
+          error: "",
+          data: {
+            placeId: detail.place_id || placeId,
+            name: detail.name || place.placeName,
+            address: detail.formatted_address || "",
+            rating: detail.rating ?? null,
+            userRatingsTotal: detail.user_ratings_total ?? null,
+            openingHours: detail.opening_hours?.weekday_text || [],
+            openingHoursLocalized: (
+              detail.opening_hours?.weekday_text || []
+            ).map(localizeWeekdayOpeningLine),
+            isOpenNow:
+              typeof detail.opening_hours?.isOpen === "function"
+                ? detail.opening_hours.isOpen()
+                : null,
+            phone: detail.formatted_phone_number || "",
+            website: detail.website || "",
+            mapUrl: detail.url || "",
+            businessStatus: detail.business_status || "",
+            businessStatusLabel: localizeBusinessStatus(detail.business_status),
+            reviews: (detail.reviews || []).slice(0, 3).map((review) => ({
+              author: review.author_name || "사용자",
+              authorUrl: review.author_url,
+              rating: review.rating ?? null,
+              text: review.text || "",
+            })),
+          },
+        });
+      } catch (error) {
+        console.error("Places 상세 조회 실패:", error);
+        setDetailState({
+          loading: false,
+          error: "장소 상세 조회에 실패했습니다.",
+          data: null,
+        });
+      }
+    },
+    [plan?.region],
+  );
 
   const openPlaceDetail = (place) => {
     setDetailPlace(place);
@@ -562,13 +673,15 @@ export default function PlanDetail() {
   };
 
   const getTodayOpeningLine = (openingHours = []) => {
-    if (!openingHours.length) return '';
-    const todayLabels = getCurrentWeekdayLabels().map((label) => label.toLowerCase());
+    if (!openingHours.length) return "";
+    const todayLabels = getCurrentWeekdayLabels().map((label) =>
+      label.toLowerCase(),
+    );
     return (
       openingHours.find((line) => {
-        const prefix = String(line).split(':')[0].trim().toLowerCase();
+        const prefix = String(line).split(":")[0].trim().toLowerCase();
         return todayLabels.some((label) => prefix === label);
-      }) || ''
+      }) || ""
     );
   };
 
@@ -576,9 +689,9 @@ export default function PlanDetail() {
     const todayLine = getTodayOpeningLine(openingHours).toLowerCase();
     if (!todayLine) return false;
     return (
-      todayLine.includes('closed') ||
-      todayLine.includes('휴무') ||
-      todayLine.includes('영업 종료')
+      todayLine.includes("closed") ||
+      todayLine.includes("휴무") ||
+      todayLine.includes("영업 종료")
     );
   };
 
@@ -594,7 +707,7 @@ export default function PlanDetail() {
     setDragging(null);
     setReplaceTarget(null);
     setReplaceCandidates([]);
-    setReplaceSearchError('');
+    setReplaceSearchError("");
     setIsEditMode(false);
   };
 
@@ -602,23 +715,37 @@ export default function PlanDetail() {
     if (!plan) return;
     setIsSaving(true);
     try {
-      const days = editableItineraries.map((day) => ({ itineraryId: day.id, places: (day.places || []).map((place) => ({
-        placeName: place.placeName, googlePlaceId: place.googlePlaceId || null, startTime: place.startTime || null,
-        durationMinutes: place.durationMinutes ?? null, category: place.category || null, memo: place.memo || ''
-      })) }));
-      const response = await fetchWithAuth(buildApiUrl(`/api/plans/${plan.id}/places`), {
-        method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ days })
-      });
+      const days = editableItineraries.map((day) => ({
+        itineraryId: day.id,
+        places: (day.places || []).map((place) => ({
+          placeName: place.placeName,
+          googlePlaceId: place.googlePlaceId || null,
+          startTime: place.startTime || null,
+          durationMinutes: place.durationMinutes ?? null,
+          category: place.category || null,
+          memo: place.memo || "",
+        })),
+      }));
+      const response = await fetchWithAuth(
+        buildApiUrl(`/api/plans/${plan.id}/places`),
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ days }),
+        },
+      );
       if (!response.ok) {
         const data = await response.json();
-        throw new Error(data.message || '일정 저장에 실패했습니다.');
+        throw new Error(data.message || "일정 저장에 실패했습니다.");
       }
       await fetchPlanDetail();
       setIsEditMode(false);
-      alert('편집한 일정이 저장되었습니다.');
+      alert("편집한 일정이 저장되었습니다.");
     } catch (error) {
-      console.error('일정 저장 실패:', error);
-      alert(error.message || '저장 중 오류가 발생했습니다. 다시 시도해 주세요.');
+      console.error("일정 저장 실패:", error);
+      alert(
+        error.message || "저장 중 오류가 발생했습니다. 다시 시도해 주세요.",
+      );
     } finally {
       setIsSaving(false);
     }
@@ -631,7 +758,7 @@ export default function PlanDetail() {
   const accommodationBadge = getVerificationBadge({
     googlePlaceId: plan?.accommodationPlaceId,
     confidence: plan?.accommodationConfidence,
-    verificationUncertain: plan?.accommodationVerificationUncertain
+    verificationUncertain: plan?.accommodationVerificationUncertain,
   });
 
   if (isLoading) {
@@ -643,378 +770,545 @@ export default function PlanDetail() {
   }
 
   if (!plan) {
-    return <div className="p-20 text-center text-xl font-bold text-[#4b6177]">일정을 찾을 수 없습니다.</div>;
+    return (
+      <div className="p-20 text-center text-xl font-bold text-[#4b6177]">
+        일정을 찾을 수 없습니다.
+      </div>
+    );
   }
 
   return (
-    <div className="flex min-h-[calc(100vh-76px)] flex-col bg-[#eef7ff] lg:h-[calc(100vh-76px)] lg:flex-row lg:overflow-hidden">
-      <div className="sticky top-0 z-20 border-b border-[#d6e9fa] bg-[#f9fdff]/95 p-2 backdrop-blur-md lg:hidden">
-        <div className="grid grid-cols-2 gap-2">
+    <div className="plan-detail flex min-h-[calc(100vh-76px)] flex-col lg:h-[calc(100vh-76px)]">
+      <div className="detail-navigation">
+        <div
+          className="detail-day-tabs"
+          role="group"
+          aria-label="여행 날짜 선택"
+        >
+          {displayItineraries.map((day) => (
+            <button
+              type="button"
+              key={day.dayNumber}
+              aria-pressed={selectedDay === day.dayNumber}
+              onClick={() => setSelectedDay(day.dayNumber)}
+            >
+              Day {day.dayNumber}
+            </button>
+          ))}
+        </div>
+        <div
+          className="detail-mobile-views"
+          role="group"
+          aria-label="일정 표시 방식"
+        >
           <button
-            onClick={() => setMobileView('plan')}
-            className={`rounded-xl px-3 py-2 text-sm font-bold transition ${
-              mobileView === 'plan'
-                ? 'bg-[#1f8ef1] text-white shadow-sm'
-                : 'border border-[#cde4f8] bg-white text-[#2d587a]'
-            }`}
+            type="button"
+            aria-pressed={mobileView === "plan"}
+            onClick={() => setMobileView("plan")}
           >
             일정 보기
           </button>
           <button
-            onClick={() => setMobileView('map')}
-            className={`rounded-xl px-3 py-2 text-sm font-bold transition ${
-              mobileView === 'map'
-                ? 'bg-[#1f8ef1] text-white shadow-sm'
-                : 'border border-[#cde4f8] bg-white text-[#2d587a]'
-            }`}
+            type="button"
+            aria-pressed={mobileView === "map"}
+            onClick={() => setMobileView("map")}
           >
             지도 보기
           </button>
         </div>
       </div>
 
-      <div
-        className={`${mobileView === 'plan' ? 'block' : 'hidden'} h-auto w-full overflow-visible border-r-0 border-[#d6e9fa] bg-[#f9fdff] lg:block lg:h-full lg:overflow-y-auto lg:border-r ${
-          isMapCollapsed ? 'lg:w-full' : 'lg:w-5/12'
-        }`}
-      >
-        <div className="sticky top-0 z-10 border-b border-[#d6e9fa] bg-[#f9fdff]/95 p-4 shadow-sm backdrop-blur-md sm:p-6">
-          <div className="mb-4 flex items-start justify-between gap-3">
-            <Link
-              to="/mypage"
-              className="inline-flex items-center text-sm font-bold text-[#4b6177] transition hover:text-[#1f8ef1]"
-            >
-              <ChevronLeft size={16} /> 목록으로 돌아가기
-            </Link>
-
-            <div className="flex items-center gap-2">
-              {!isEditMode ? (
-                <button
-                  onClick={startEditMode}
-                  className="inline-flex items-center gap-2 rounded-full border border-[#cde4f8] bg-white px-4 py-2 text-sm font-bold text-[#2d587a] transition hover:border-[#1f8ef1] hover:text-[#1f8ef1]"
-                >
-                  <PencilLine size={16} /> 일정 편집
-                </button>
-              ) : (
-                <>
-                  <button
-                    onClick={cancelEditMode}
-                    disabled={isSaving}
-                    className="inline-flex items-center gap-1 rounded-full border border-[#d4e7f9] bg-white px-3 py-2 text-xs font-bold text-[#4b6177] transition hover:bg-[#f5fafe] disabled:opacity-50"
-                  >
-                    <X size={14} /> 취소
-                  </button>
-                  <button
-                    onClick={saveEdits}
-                    disabled={isSaving}
-                    className="inline-flex items-center gap-1 rounded-full bg-[#1f8ef1] px-3 py-2 text-xs font-bold text-white shadow-sm transition hover:bg-[#1878cc] disabled:opacity-60"
-                  >
-                    {isSaving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
-                    저장
-                  </button>
-                </>
-              )}
-
-              <button
-                onClick={() => setIsMapCollapsed((prev) => !prev)}
-                className="hidden rounded-full border border-[#cde4f8] bg-white px-3 py-2 text-xs font-bold text-[#2d587a] transition hover:border-[#1f8ef1] hover:text-[#1f8ef1] lg:inline-flex"
+      <div className="detail-panes flex min-h-0 flex-1 flex-col lg:flex-row">
+        <div
+          className={`detail-itinerary ${mobileView === "plan" ? "block" : "hidden"} h-auto w-full overflow-visible lg:block lg:h-full lg:overflow-y-auto ${
+            isMapCollapsed ? "lg:w-full" : "lg:w-7/12"
+          }`}
+        >
+          <div className="detail-header p-5 sm:p-8">
+            <div className="mb-4 flex items-start justify-between gap-3">
+              <Link
+                to="/mypage"
+                className="inline-flex items-center text-sm font-bold text-[#4b6177] transition hover:text-[#1f8ef1]"
               >
-                {isMapCollapsed ? '지도 펼치기' : '지도 숨기기'}
-              </button>
-            </div>
-          </div>
+                <ChevronLeft size={16} /> 목록으로 돌아가기
+              </Link>
 
-          <h1 className="mb-3 text-xl font-black leading-tight text-[#1f3550] sm:text-2xl">{plan.title}</h1>
-
-          <div className="flex flex-wrap items-center gap-2 text-sm font-semibold text-[#4b6177]">
-            <span className="flex items-center gap-1.5 rounded-lg bg-[#eaf6ff] px-3 py-1.5 text-[#1f8ef1]">
-              <MapPin size={16} /> {plan.region}
-            </span>
-            <span className="flex items-center gap-1.5 rounded-lg bg-[#f2f9ff] px-3 py-1.5">
-              <Calendar size={16} /> {plan.startDate} ~ {plan.endDate}
-            </span>
-          </div>
-
-          <div className="mt-3 flex flex-wrap gap-2 text-xs font-medium text-[#4b6177]">
-            {plan.departure && <span className="rounded border border-[#d6e9fa] bg-[#f2f9ff] px-2 py-1">출발: {plan.departure}</span>}
-            {plan.companion && <span className="rounded border border-[#d6e9fa] bg-[#f2f9ff] px-2 py-1">동행: {({ SOLO: '혼자', COUPLE: '연인', FRIENDS: '친구', FAMILY: '가족' })[plan.companion] || plan.companion}</span>}
-            {plan.style && <span className="rounded border border-[#d6e9fa] bg-[#f2f9ff] px-2 py-1">스타일: {plan.style.replaceAll('FOOD', '맛집').replaceAll('CAFE', '카페').replaceAll('NATURE', '자연').replaceAll('CULTURE', '문화').replaceAll('SHOPPING', '쇼핑').replaceAll('EXPERIENCE', '체험').replaceAll('[', '').replaceAll(']', '')}</span>}
-            {plan.accommodation && (
-              <>
-                <button
-                  type="button"
-                  disabled={!accommodationPlace}
-                  onClick={() => accommodationPlace && openPlaceDetail(accommodationPlace)}
-                  className="flex items-center gap-1 rounded border border-[#c8e5ff] bg-[#eaf6ff] px-2 py-1 text-[#276899] transition hover:border-[#1f8ef1] hover:text-[#1f8ef1] disabled:cursor-default disabled:hover:border-[#c8e5ff] disabled:hover:text-[#276899]"
-                >
-                  <BedDouble size={14} /> {plan.accommodation}
-                </button>
-                {accommodationBadge && (
-                  <span className={`rounded border px-2 py-1 font-bold ${accommodationBadge.className}`}>
-                    숙소 {accommodationBadge.label}
-                  </span>
-                )}
-              </>
-            )}
-          </div>
-        </div>
-
-        <div className="space-y-8 p-4 pb-8 sm:p-6 sm:pb-20">
-          <p className="rounded-xl bg-slate-50 p-4 text-xs leading-relaxed text-slate-500">{plan.generationNotes || '이전 버전의 일정입니다. 장소와 영업 정보를 다시 확인해 주세요.'} 지도 연결선은 방문 순서이며 실제 이동 경로가 아닙니다.</p>
-          {displayItineraries.map((day) => (
-            <div key={day.id || day.dayNumber} className="relative">
-              <h2 className="mb-4 flex items-center gap-2 text-xl font-bold text-[#1f3550]">
-                <span className="rounded-lg bg-[#1f8ef1] px-3 py-1 text-sm text-white shadow-sm">Day {day.dayNumber}</span>
-                {day.theme}
-              </h2>
-
-              <div className="ml-4 mt-2 space-y-4 border-l-2 border-[#b9dcfa] pl-4">
-                {(day.places || []).map((place, idx) => (
-                  (() => {
-                    const placeKey = buildPlaceKey(day.dayNumber, idx, place);
-                    const focusable = day.dayNumber === selectedDay && hasValidCoordinates(place);
-                    const isFocused = focusedPlaceKey === placeKey;
-                    const verificationBadge = getVerificationBadge(place, isEditMode);
-                    return (
-                  <div
-                    key={placeKey}
-                    className="relative pl-6"
-                    draggable={isEditMode}
-                    onDragStart={() => handleDragStart(day.dayNumber, idx)}
-                    onDragOver={(event) => isEditMode && event.preventDefault()}
-                    onDrop={() => handleDrop(day.dayNumber, idx)}
-                    onDragEnd={() => setDragging(null)}
+              <div className="flex items-center gap-2">
+                {!isEditMode ? (
+                  <button
+                    onClick={startEditMode}
+                    className="inline-flex items-center gap-2 rounded-full border border-[#cde4f8] bg-white px-4 py-2 text-sm font-bold text-[#2d587a] transition hover:border-[#1f8ef1] hover:text-[#1f8ef1]"
                   >
-                    <div className="absolute -left-[21px] top-1 h-4 w-4 rounded-full border-4 border-[#1f8ef1] bg-white shadow-sm" />
-                    <div
-                      className={`group rounded-2xl border bg-[#f9fdff] p-4 transition ${
-                        isEditMode
-                          ? 'cursor-grab border-[#b9dbf8] hover:border-[#1f8ef1] hover:shadow-md'
-                          : isFocused
-                            ? 'cursor-pointer border-[#1f8ef1] ring-2 ring-[#8ec9f8] shadow-md'
-                            : 'cursor-pointer border-[#d6e9fa] hover:border-[#1f8ef1] hover:shadow-md'
-                      }`}
-                      onMouseEnter={() => focusable && setFocusedPlaceKey(placeKey)}
-                      onMouseLeave={() => focusable && setFocusedPlaceKey((prev) => (prev === placeKey ? null : prev))}
-                      onClick={() => {
-                        if (focusable) setFocusedPlaceKey(placeKey);
-                        if (focusable && !isEditMode && isMobileViewport()) {
-                          setMobileView('map');
-                          return;
-                        }
-                        openPlaceDetail(place);
-                      }}
+                    <PencilLine size={16} /> 일정 편집
+                  </button>
+                ) : (
+                  <>
+                    <button
+                      onClick={cancelEditMode}
+                      disabled={isSaving}
+                      className="inline-flex items-center gap-1 rounded-full border border-[#d4e7f9] bg-white px-3 py-2 text-xs font-bold text-[#4b6177] transition hover:bg-[#f5fafe] disabled:opacity-50"
                     >
-
-                      <div className="flex items-start justify-between gap-3">
-                        <h3 className="flex items-center gap-2 text-lg font-bold text-[#1f3550] transition group-hover:text-[#1f8ef1]">
-                          {isEditMode && <GripVertical size={16} className="text-[#5f89ad]" />}
-                          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#eaf6ff] text-xs font-black text-[#1f8ef1]">
-                            {idx + 1}
-                          </span>
-                          {place.placeName}
-                        </h3>
-
-                        {isEditMode && (
-                          <div className="flex items-center gap-1">
-                            <button
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                autoReplacePlace(day.dayNumber, idx, place);
-                              }}
-                              disabled={autoReplaceKey === `${day.dayNumber}-${idx}`}
-                              className="inline-flex items-center gap-1 rounded-lg border border-[#d3e7f9] bg-white px-2 py-1 text-xs font-bold text-[#2e6b91] hover:border-[#1f8ef1] hover:text-[#1f8ef1] disabled:opacity-60"
-                            >
-                              {autoReplaceKey === `${day.dayNumber}-${idx}` ? (
-                                <Loader2 size={12} className="animate-spin" />
-                              ) : (
-                                <Sparkles size={12} />
-                              )}
-                              자동대체
-                            </button>
-                            <button
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                openReplaceModal(day.dayNumber, idx, place);
-                              }}
-                              className="inline-flex items-center gap-1 rounded-lg border border-[#d3e7f9] bg-white px-2 py-1 text-xs font-bold text-[#3c6b91] hover:border-[#1f8ef1] hover:text-[#1f8ef1]"
-                            >
-                              <RefreshCcw size={12} /> 교체
-                            </button>
-                            <button
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                removePlace(day.dayNumber, idx);
-                              }}
-                              className="inline-flex items-center gap-1 rounded-lg border border-[#f4d2d2] bg-white px-2 py-1 text-xs font-bold text-[#b54747] hover:bg-[#fff5f5]"
-                            >
-                              <Trash2 size={12} /> 삭제
-                            </button>
-                          </div>
-                        )}
-                      </div>
-
-                      <div className="mt-3 flex flex-wrap gap-1.5">
-                        {place.startTime && (
-                          <span className="rounded-full bg-[#eaf6ff] px-2.5 py-1 text-[11px] font-black text-[#1f8ef1]">
-                            {place.startTime}
-                          </span>
-                        )}
-                        {place.category && (
-                          <span className="rounded-full border border-[#d6e9fa] bg-white px-2.5 py-1 text-[11px] font-bold text-[#4b6177]">
-                            {place.category}
-                          </span>
-                        )}
-                        {Number.isFinite(Number(place.durationMinutes)) && (
-                          <span className="rounded-full border border-[#d6e9fa] bg-white px-2.5 py-1 text-[11px] font-bold text-[#4b6177]">
-                            약 {place.durationMinutes}분
-                          </span>
-                        )}
-                      </div>
-
-                      {verificationBadge && (
-                        <span className={`mt-3 inline-flex rounded-full border px-2.5 py-1 text-[11px] font-black ${verificationBadge.className}`}>
-                          {verificationBadge.label}
-                        </span>
+                      <X size={14} /> 취소
+                    </button>
+                    <button
+                      onClick={saveEdits}
+                      disabled={isSaving}
+                      className="inline-flex items-center gap-1 rounded-full bg-[#1f8ef1] px-3 py-2 text-xs font-bold text-white shadow-sm transition hover:bg-[#1878cc] disabled:opacity-60"
+                    >
+                      {isSaving ? (
+                        <Loader2 size={14} className="animate-spin" />
+                      ) : (
+                        <Save size={14} />
                       )}
-
-                      {place.memo && (
-                        <p className="mt-3 flex items-start gap-2 rounded-xl border border-[#d9ebfb] bg-white p-3 text-sm leading-relaxed text-[#4b6177]">
-                          <Bot size={16} className="mt-0.5 shrink-0 text-[#1f8ef1]" /> {place.memo}
-                        </p>
-                      )}
-                      {place.sourceUri && isGoogleMapsSource(place.sourceUri) && <a href={place.sourceUri} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className="mt-2 inline-flex gap-1 text-xs font-normal text-[#5e5e5e]"><span translate="no" className="whitespace-nowrap">Google Maps</span> · {place.sourceTitle || place.placeName} ↗</a>}
-                    </div>
-                  </div>
-                    );
-                  })()
-                ))}
-
-                {isEditMode && (day.places || []).length === 0 && (
-                  <div className="rounded-xl border border-dashed border-[#b9dbf8] bg-[#f4faff] p-4 text-sm text-[#5f89ad]">
-                    이 날은 장소가 없습니다. 다른 장소를 교체로 입력하거나 AI로 다시 생성해 주세요.
-                  </div>
+                      저장
+                    </button>
+                  </>
                 )}
+
+                <button
+                  onClick={() => setIsMapCollapsed((prev) => !prev)}
+                  className="hidden rounded-full border border-[#cde4f8] bg-white px-3 py-2 text-xs font-bold text-[#2d587a] transition hover:border-[#1f8ef1] hover:text-[#1f8ef1] lg:inline-flex"
+                >
+                  {isMapCollapsed ? "지도 펼치기" : "지도 숨기기"}
+                </button>
               </div>
             </div>
-          ))}
-        </div>
-      </div>
 
-      <div
-        className={`${mobileView === 'map' ? 'block' : 'hidden'} relative h-[calc(100vh-170px)] w-full border-t border-[#d6e9fa] bg-[#dceefe] lg:block lg:h-full lg:border-t-0 ${
-          isMapCollapsed ? 'lg:hidden' : 'lg:w-7/12'
-        }`}
-      >
-        <div className="absolute left-1/2 top-3 z-10 flex max-w-[94%] -translate-x-1/2 gap-1 overflow-x-auto rounded-full border border-[#d3e8fb] bg-[#f9fdff]/92 p-1.5 shadow-lg backdrop-blur-md lg:top-6 lg:max-w-[90%]">
-          {displayItineraries.map((day) => (
-            <button
-              key={day.dayNumber}
-              onClick={() => setSelectedDay(day.dayNumber)}
-              className={`whitespace-nowrap rounded-full px-5 py-2.5 text-sm font-bold transition-all ${
-                selectedDay === day.dayNumber ? 'bg-[#1f8ef1] text-white shadow-md' : 'text-[#4b6177] hover:bg-[#eaf6ff]'
-              }`}
-            >
-              Day {day.dayNumber}
-            </button>
-          ))}
-        </div>
+            <h1 className="mb-3 text-xl font-bold leading-snug text-[#24334a] sm:text-2xl">
+              {plan.title}
+            </h1>
 
-        <div className="absolute right-3 top-3 z-10 flex items-center gap-2 lg:right-6 lg:top-6">
-          <button
-            onClick={fitCurrentDayBounds}
-            className="rounded-full border border-[#cde4f8] bg-white/95 px-3 py-2 text-xs font-bold text-[#2d587a] shadow-md backdrop-blur hover:border-[#1f8ef1] hover:text-[#1f8ef1]"
-          >
-            전체보기
-          </button>
-          <button
-            onClick={() => setIsMapCollapsed(true)}
-            className="hidden rounded-full border border-[#cde4f8] bg-white/95 px-3 py-2 text-xs font-bold text-[#2d587a] shadow-md backdrop-blur hover:border-[#1f8ef1] hover:text-[#1f8ef1] lg:inline-flex"
-          >
-            지도 닫기
-          </button>
-        </div>
+            <div className="flex flex-wrap items-center gap-2 text-sm font-semibold text-[#4b6177]">
+              <span className="flex items-center gap-1.5 rounded-lg bg-[#eaf6ff] px-3 py-1.5 text-[#1f8ef1]">
+                <MapPin size={16} /> {plan.region}
+              </span>
+              <span className="flex items-center gap-1.5 rounded-lg bg-[#f2f9ff] px-3 py-1.5">
+                <Calendar size={16} /> {plan.startDate} ~ {plan.endDate}
+              </span>
+            </div>
 
-        {!isLoaded ? (
-          <div className="flex h-full flex-col items-center justify-center text-[#4b6177]">
-            <Loader2 className="mb-4 animate-spin" size={40} />
-            <p className="font-semibold">지도를 불러오는 중입니다...</p>
+            <div className="mt-3 flex flex-wrap gap-2 text-xs font-medium text-[#4b6177]">
+              {plan.departure && (
+                <span className="rounded border border-[#d6e9fa] bg-[#f2f9ff] px-2 py-1">
+                  출발: {plan.departure}
+                </span>
+              )}
+              {plan.companion && (
+                <span className="rounded border border-[#d6e9fa] bg-[#f2f9ff] px-2 py-1">
+                  동행:{" "}
+                  {{
+                    SOLO: "혼자",
+                    COUPLE: "연인",
+                    FRIENDS: "친구",
+                    FAMILY: "가족",
+                  }[plan.companion] || plan.companion}
+                </span>
+              )}
+              {plan.style && (
+                <span className="rounded border border-[#d6e9fa] bg-[#f2f9ff] px-2 py-1">
+                  스타일:{" "}
+                  {plan.style
+                    .replaceAll("FOOD", "맛집")
+                    .replaceAll("CAFE", "카페")
+                    .replaceAll("NATURE", "자연")
+                    .replaceAll("CULTURE", "문화")
+                    .replaceAll("SHOPPING", "쇼핑")
+                    .replaceAll("EXPERIENCE", "체험")
+                    .replaceAll("[", "")
+                    .replaceAll("]", "")}
+                </span>
+              )}
+              {plan.accommodation && (
+                <>
+                  <button
+                    type="button"
+                    disabled={!accommodationPlace}
+                    onClick={() =>
+                      accommodationPlace && openPlaceDetail(accommodationPlace)
+                    }
+                    className="flex items-center gap-1 rounded border border-[#c8e5ff] bg-[#eaf6ff] px-2 py-1 text-[#276899] transition hover:border-[#1f8ef1] hover:text-[#1f8ef1] disabled:cursor-default disabled:hover:border-[#c8e5ff] disabled:hover:text-[#276899]"
+                  >
+                    <BedDouble size={14} /> {plan.accommodation}
+                  </button>
+                  {accommodationBadge && (
+                    <span
+                      className={`rounded border px-2 py-1 font-bold ${accommodationBadge.className}`}
+                    >
+                      숙소 {accommodationBadge.label}
+                    </span>
+                  )}
+                </>
+              )}
+            </div>
           </div>
-        ) : (
-          <GoogleMap
-            mapContainerStyle={{ width: '100%', height: '100%' }}
-            onLoad={onLoadMap}
-            options={mapOptions}
-          >
-            {accommodationPlace && (
-              <Marker
-                key="accommodation"
-                position={{ lat: accommodationPlace.latitude, lng: accommodationPlace.longitude }}
-                label={{ text: '숙', color: 'white', fontWeight: 'bold' }}
-                zIndex={1200}
-                icon={{
-                  path: window.google.maps.SymbolPath.CIRCLE,
-                  fillColor: '#0f766e',
-                  fillOpacity: 1,
-                  strokeColor: '#ffffff',
-                  strokeWeight: 2,
-                  scale: 13
-                }}
-                onClick={() => openPlaceDetail(accommodationPlace)}
-              />
-            )}
 
-            {currentDayPlaces.map((place) => {
-              const isFocused = focusedPlaceKey === place.placeKey;
-              return (
-              <Marker
-                key={place.placeKey}
-                position={{ lat: place.latitude, lng: place.longitude }}
-                label={{ text: String(place.markerOrder), color: 'white', fontWeight: 'bold' }}
-                zIndex={isFocused ? 1000 : 1}
-                icon={{
-                  path: window.google.maps.SymbolPath.CIRCLE,
-                  fillColor: isFocused ? '#ff7a45' : '#1f8ef1',
-                  fillOpacity: 1,
-                  strokeColor: '#ffffff',
-                  strokeWeight: 2,
-                  scale: isFocused ? 13 : 11
-                }}
-                onMouseOver={() => setFocusedPlaceKey(place.placeKey)}
-                onMouseOut={() => setFocusedPlaceKey((prev) => (prev === place.placeKey ? null : prev))}
-                onClick={() => {
-                  setFocusedPlaceKey(place.placeKey);
-                  openPlaceDetail(place);
-                }}
-              />
-              );
-            })}
+          <div className="detail-schedule space-y-7 p-5 pb-8 sm:p-8 sm:pb-16">
+            <details className="detail-notes">
+              <summary>일정 정보와 방문 전 확인 사항</summary>
+              <p>
+                {plan.generationNotes ||
+                  "이전 버전의 일정입니다. 장소와 영업 정보를 다시 확인해 주세요."}{" "}
+                지도 연결선은 방문 순서이며 실제 이동 경로가 아닙니다.
+              </p>
+            </details>
+            {displayItineraries
+              .filter((day) => day.dayNumber === selectedDay)
+              .map((day) => (
+                <div key={day.id || day.dayNumber} className="relative">
+                  <h2 className="detail-day-heading">
+                    <span>Day {day.dayNumber}</span>
+                    {day.theme}
+                  </h2>
 
-            {currentDayPlaces.length > 1 && (
-              <Polyline
-                path={routePath.length > 1 ? routePath : currentDayPlaces.map(toLatLngLiteral)}
-                options={{ strokeColor: '#1f8ef1', strokeOpacity: 0.92, strokeWeight: 5 }}
-              />
-            )}
-          </GoogleMap>
-        )}
+                  <div className="detail-timeline">
+                    {(day.places || []).map((place, idx) =>
+                      (() => {
+                        const placeKey = buildPlaceKey(
+                          day.dayNumber,
+                          idx,
+                          place,
+                        );
+                        const focusable =
+                          day.dayNumber === selectedDay &&
+                          hasValidCoordinates(place);
+                        const isFocused = focusedPlaceKey === placeKey;
+                        const verificationBadge = getVerificationBadge(
+                          place,
+                          isEditMode,
+                        );
+                        return (
+                          <div
+                            key={placeKey}
+                            className="detail-stop relative"
+                            draggable={isEditMode}
+                            onDragStart={() =>
+                              handleDragStart(day.dayNumber, idx)
+                            }
+                            onDragOver={(event) =>
+                              isEditMode && event.preventDefault()
+                            }
+                            onDrop={() => handleDrop(day.dayNumber, idx)}
+                            onDragEnd={() => setDragging(null)}
+                          >
+                            <div
+                              className={`detail-place-card group p-4 sm:p-5 transition ${
+                                isEditMode
+                                  ? "cursor-grab border-[#b9dbf8] hover:border-[#1f8ef1] hover:shadow-md"
+                                  : isFocused
+                                    ? "cursor-pointer border-[#1f8ef1] ring-2 ring-[#8ec9f8] shadow-md"
+                                    : ""
+                              }`}
+                              onMouseEnter={() =>
+                                focusable && setFocusedPlaceKey(placeKey)
+                              }
+                              onMouseLeave={() =>
+                                focusable &&
+                                setFocusedPlaceKey((prev) =>
+                                  prev === placeKey ? null : prev,
+                                )
+                              }
+                            >
+                              <div className="flex items-start justify-between gap-3">
+                                <h3 className="flex items-center gap-2 text-lg font-bold text-[#1f3550] transition group-hover:text-[#1f8ef1]">
+                                  {isEditMode && (
+                                    <GripVertical
+                                      size={16}
+                                      className="text-[#5f89ad]"
+                                    />
+                                  )}
+                                  <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#eaf6ff] text-xs font-black text-[#1f8ef1]">
+                                    {idx + 1}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    className="detail-place-title"
+                                    onClick={() => openPlaceDetail(place)}
+                                  >
+                                    {place.placeName}
+                                  </button>
+                                </h3>
 
+                                {isEditMode && (
+                                  <div className="flex items-center gap-1">
+                                    <button
+                                      onClick={(event) => {
+                                        event.stopPropagation();
+                                        autoReplacePlace(
+                                          day.dayNumber,
+                                          idx,
+                                          place,
+                                        );
+                                      }}
+                                      disabled={
+                                        autoReplaceKey ===
+                                        `${day.dayNumber}-${idx}`
+                                      }
+                                      className="inline-flex items-center gap-1 rounded-lg border border-[#d3e7f9] bg-white px-2 py-1 text-xs font-bold text-[#2e6b91] hover:border-[#1f8ef1] hover:text-[#1f8ef1] disabled:opacity-60"
+                                    >
+                                      {autoReplaceKey ===
+                                      `${day.dayNumber}-${idx}` ? (
+                                        <Loader2
+                                          size={12}
+                                          className="animate-spin"
+                                        />
+                                      ) : (
+                                        <Sparkles size={12} />
+                                      )}
+                                      자동대체
+                                    </button>
+                                    <button
+                                      onClick={(event) => {
+                                        event.stopPropagation();
+                                        openReplaceModal(
+                                          day.dayNumber,
+                                          idx,
+                                          place,
+                                        );
+                                      }}
+                                      className="inline-flex items-center gap-1 rounded-lg border border-[#d3e7f9] bg-white px-2 py-1 text-xs font-bold text-[#3c6b91] hover:border-[#1f8ef1] hover:text-[#1f8ef1]"
+                                    >
+                                      <RefreshCcw size={12} /> 교체
+                                    </button>
+                                    <button
+                                      onClick={(event) => {
+                                        event.stopPropagation();
+                                        removePlace(day.dayNumber, idx);
+                                      }}
+                                      className="inline-flex items-center gap-1 rounded-lg border border-[#f4d2d2] bg-white px-2 py-1 text-xs font-bold text-[#b54747] hover:bg-[#fff5f5]"
+                                    >
+                                      <Trash2 size={12} /> 삭제
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
 
+                              <div className="mt-3 flex flex-wrap gap-1.5">
+                                {place.startTime && (
+                                  <span className="rounded-full bg-[#eaf6ff] px-2.5 py-1 text-[11px] font-black text-[#1f8ef1]">
+                                    {place.startTime}
+                                  </span>
+                                )}
+                                {place.category && (
+                                  <span className="rounded-full border border-[#d6e9fa] bg-white px-2.5 py-1 text-[11px] font-bold text-[#4b6177]">
+                                    {place.category}
+                                  </span>
+                                )}
+                                {Number(place.durationMinutes) > 0 &&
+                                  Number.isFinite(
+                                    Number(place.durationMinutes),
+                                  ) && (
+                                    <span className="rounded-full border border-[#d6e9fa] bg-white px-2.5 py-1 text-[11px] font-bold text-[#4b6177]">
+                                      약 {place.durationMinutes}분
+                                    </span>
+                                  )}
+                              </div>
 
+                              {verificationBadge && (
+                                <span
+                                  className={`mt-3 inline-flex rounded-full border px-2.5 py-1 text-[11px] font-black ${verificationBadge.className}`}
+                                >
+                                  {verificationBadge.label}
+                                </span>
+                              )}
 
+                              {place.memo && (
+                                <p className="detail-place-memo">
+                                  {place.memo}
+                                </p>
+                              )}
+                              {place.sourceUri &&
+                                isGoogleMapsSource(place.sourceUri) && (
+                                  <a
+                                    href={place.sourceUri}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    onClick={(e) => e.stopPropagation()}
+                                    className="mt-2 inline-flex gap-1 text-xs font-normal text-[#5e5e5e]"
+                                  >
+                                    <span
+                                      translate="no"
+                                      className="whitespace-nowrap"
+                                    >
+                                      Google Maps
+                                    </span>{" "}
+                                    · {place.sourceTitle || place.placeName} ↗
+                                  </a>
+                                )}
+                              <div className="detail-place-actions">
+                                <button
+                                  type="button"
+                                  onClick={() => openPlaceDetail(place)}
+                                >
+                                  장소 상세 <span aria-hidden="true">↗</span>
+                                </button>
+                                {focusable && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setFocusedPlaceKey(placeKey);
+                                      if (isMobileViewport())
+                                        setMobileView("map");
+                                    }}
+                                  >
+                                    지도에서 보기
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })(),
+                    )}
 
+                    {isEditMode && (day.places || []).length === 0 && (
+                      <div className="rounded-xl border border-dashed border-[#b9dbf8] bg-[#f4faff] p-4 text-sm text-[#5f89ad]">
+                        이 날은 장소가 없습니다. 다른 장소를 교체로 입력하거나
+                        AI로 다시 생성해 주세요.
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+          </div>
+        </div>
+
+        <div
+          className={`detail-map ${mobileView === "map" ? "block" : "hidden"} relative w-full bg-[#edf0f4] lg:block lg:h-full ${
+            isMapCollapsed ? "lg:hidden" : "lg:w-5/12"
+          }`}
+        >
+          <span className="detail-map-label">
+            Day {selectedDay} · 방문 순서
+          </span>
+
+          <div className="absolute right-3 top-3 z-10 flex items-center gap-2 lg:right-6 lg:top-6">
+            <button
+              onClick={fitCurrentDayBounds}
+              className="rounded-full border border-[#cde4f8] bg-white/95 px-3 py-2 text-xs font-bold text-[#2d587a] shadow-md backdrop-blur hover:border-[#1f8ef1] hover:text-[#1f8ef1]"
+            >
+              전체보기
+            </button>
+            <button
+              onClick={() => setIsMapCollapsed(true)}
+              className="hidden rounded-full border border-[#cde4f8] bg-white/95 px-3 py-2 text-xs font-bold text-[#2d587a] shadow-md backdrop-blur hover:border-[#1f8ef1] hover:text-[#1f8ef1] lg:inline-flex"
+            >
+              지도 닫기
+            </button>
+          </div>
+
+          {!isLoaded ? (
+            <div className="flex h-full flex-col items-center justify-center text-[#4b6177]">
+              <Loader2 className="mb-4 animate-spin" size={40} />
+              <p className="font-semibold">지도를 불러오는 중입니다...</p>
+            </div>
+          ) : (
+            <GoogleMap
+              mapContainerStyle={{ width: "100%", height: "100%" }}
+              onLoad={onLoadMap}
+              options={mapOptions}
+            >
+              {accommodationPlace && (
+                <Marker
+                  key="accommodation"
+                  position={{
+                    lat: accommodationPlace.latitude,
+                    lng: accommodationPlace.longitude,
+                  }}
+                  label={{ text: "숙", color: "white", fontWeight: "bold" }}
+                  zIndex={1200}
+                  icon={{
+                    path: window.google.maps.SymbolPath.CIRCLE,
+                    fillColor: "#0f766e",
+                    fillOpacity: 1,
+                    strokeColor: "#ffffff",
+                    strokeWeight: 2,
+                    scale: 13,
+                  }}
+                  onClick={() => openPlaceDetail(accommodationPlace)}
+                />
+              )}
+
+              {currentDayPlaces.map((place) => {
+                const isFocused = focusedPlaceKey === place.placeKey;
+                return (
+                  <Marker
+                    key={place.placeKey}
+                    position={{ lat: place.latitude, lng: place.longitude }}
+                    label={{
+                      text: String(place.markerOrder),
+                      color: "white",
+                      fontWeight: "bold",
+                    }}
+                    zIndex={isFocused ? 1000 : 1}
+                    icon={{
+                      path: window.google.maps.SymbolPath.CIRCLE,
+                      fillColor: isFocused ? "#ff7a45" : "#1f8ef1",
+                      fillOpacity: 1,
+                      strokeColor: "#ffffff",
+                      strokeWeight: 2,
+                      scale: isFocused ? 13 : 11,
+                    }}
+                    onMouseOver={() => setFocusedPlaceKey(place.placeKey)}
+                    onMouseOut={() =>
+                      setFocusedPlaceKey((prev) =>
+                        prev === place.placeKey ? null : prev,
+                      )
+                    }
+                    onClick={() => {
+                      setFocusedPlaceKey(place.placeKey);
+                      openPlaceDetail(place);
+                    }}
+                  />
+                );
+              })}
+
+              {currentDayPlaces.length > 1 && (
+                <Polyline
+                  path={
+                    routePath.length > 1
+                      ? routePath
+                      : currentDayPlaces.map(toLatLngLiteral)
+                  }
+                  options={{
+                    strokeOpacity: 0,
+                    icons: [
+                      {
+                        icon: {
+                          path: "M 0,-1 0,1",
+                          strokeColor: "#2464e8",
+                          strokeOpacity: 0.65,
+                          scale: 2,
+                        },
+                        offset: "0",
+                        repeat: "12px",
+                      },
+                    ],
+                  }}
+                />
+              )}
+            </GoogleMap>
+          )}
+        </div>
       </div>
 
       {replaceTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4 backdrop-blur-sm">
           <div className="w-full max-w-lg rounded-3xl border border-[#d5e8fa] bg-white p-5 shadow-2xl">
-            <h3 className="mb-4 text-lg font-black text-[#1f3550]">장소 교체</h3>
+            <h3 className="mb-4 text-lg font-black text-[#1f3550]">
+              장소 교체
+            </h3>
             <div className="space-y-3">
               <div className="flex gap-2">
                 <input
                   type="text"
                   value={replaceTarget.placeName}
-                  onChange={(event) => setReplaceTarget((prev) => ({ ...prev, placeName: event.target.value, googlePlaceId: '' }))}
+                  onChange={(event) =>
+                    setReplaceTarget((prev) => ({
+                      ...prev,
+                      placeName: event.target.value,
+                      googlePlaceId: "",
+                    }))
+                  }
                   placeholder="장소명"
                   className="w-full rounded-xl border border-[#d2e8fb] px-3 py-2 text-sm outline-none focus:border-[#1f8ef1]"
                 />
@@ -1023,12 +1317,20 @@ export default function PlanDetail() {
                   disabled={isSearchingPlace}
                   className="inline-flex shrink-0 items-center gap-1 rounded-xl border border-[#cde4f8] bg-[#f5fbff] px-3 py-2 text-sm font-bold text-[#2d587a] hover:border-[#1f8ef1] hover:text-[#1f8ef1] disabled:opacity-60"
                 >
-                  {isSearchingPlace ? <Loader2 size={14} className="animate-spin" /> : <Search size={14} />}
+                  {isSearchingPlace ? (
+                    <Loader2 size={14} className="animate-spin" />
+                  ) : (
+                    <Search size={14} />
+                  )}
                   검색
                 </button>
               </div>
 
-              {!!replaceSearchError && <p className="text-xs font-semibold text-[#b54747]">{replaceSearchError}</p>}
+              {!!replaceSearchError && (
+                <p className="text-xs font-semibold text-[#b54747]">
+                  {replaceSearchError}
+                </p>
+              )}
 
               {replaceCandidates.length > 0 && (
                 <div className="max-h-56 space-y-2 overflow-y-auto rounded-xl border border-[#dbeaf9] bg-[#f8fcff] p-2">
@@ -1038,21 +1340,37 @@ export default function PlanDetail() {
                       onClick={() => selectReplaceCandidate(candidate)}
                       className="w-full rounded-lg border border-[#dbeaf9] bg-white p-2 text-left text-sm hover:border-[#1f8ef1]"
                     >
-                      <p className="font-bold text-[#1f3550]">{candidate.placeName}</p>
-                      <p className="mt-0.5 text-xs text-[#5b7d9a]">{candidate.address || '주소 정보 없음'}</p>
+                      <p className="font-bold text-[#1f3550]">
+                        {candidate.placeName}
+                      </p>
+                      <p className="mt-0.5 text-xs text-[#5b7d9a]">
+                        {candidate.address || "주소 정보 없음"}
+                      </p>
                       <p className="mt-0.5 text-xs text-[#4b6177]">
-                        {candidate.rating ? `평점 ${candidate.rating}` : '평점 없음'}
-                        {candidate.userRatingsTotal ? ` (${candidate.userRatingsTotal})` : ''}
+                        {candidate.rating
+                          ? `평점 ${candidate.rating}`
+                          : "평점 없음"}
+                        {candidate.userRatingsTotal
+                          ? ` (${candidate.userRatingsTotal})`
+                          : ""}
                       </p>
                     </button>
                   ))}
                 </div>
               )}
 
-              <p className="text-xs text-slate-500">검색 결과에서 장소를 선택해 주세요. 위치와 검증 상태는 서버에서 다시 확인합니다.</p>
+              <p className="text-xs text-slate-500">
+                검색 결과에서 장소를 선택해 주세요. 위치와 검증 상태는 서버에서
+                다시 확인합니다.
+              </p>
               <textarea
                 value={replaceTarget.memo}
-                onChange={(event) => setReplaceTarget((prev) => ({ ...prev, memo: event.target.value }))}
+                onChange={(event) =>
+                  setReplaceTarget((prev) => ({
+                    ...prev,
+                    memo: event.target.value,
+                  }))
+                }
                 placeholder="메모"
                 rows={3}
                 className="w-full rounded-xl border border-[#d2e8fb] px-3 py-2 text-sm outline-none focus:border-[#1f8ef1]"
@@ -1080,7 +1398,9 @@ export default function PlanDetail() {
         <div className="fixed inset-0 z-[80] flex items-end justify-center bg-black/45 p-3 pt-20 backdrop-blur-sm sm:items-start sm:px-4 sm:pb-6 sm:pt-20">
           <div className="flex max-h-[82vh] w-full max-w-xl flex-col rounded-2xl border border-[#d5e8fa] bg-white p-4 shadow-2xl sm:max-h-[calc(100vh-6rem)] sm:rounded-3xl sm:p-5">
             <div className="mb-3 border-b border-[#e5eff8] pb-3">
-              <h3 className="text-base font-black leading-snug text-[#1f3550] sm:text-lg">{detailPlace.placeName}</h3>
+              <h3 className="text-base font-black leading-snug text-[#1f3550] sm:text-lg">
+                {detailPlace.placeName}
+              </h3>
             </div>
 
             <div className="min-h-0 flex-1 overflow-y-auto pr-1">
@@ -1099,89 +1419,136 @@ export default function PlanDetail() {
 
               {detailState.data && (
                 <div className="space-y-3 text-sm text-[#3f5f7b]">
-                <div className="flex flex-wrap gap-2">
-                  {detailState.data.isOpenNow === true && (
-                    <span className="rounded-full border border-emerald-200 bg-emerald-100 px-3 py-1.5 text-xs font-black text-emerald-700">
-                      현재 영업중
-                    </span>
-                  )}
-                  {detailState.data.isOpenNow === false && (
-                    <span className="rounded-full border border-rose-200 bg-rose-100 px-3 py-1.5 text-xs font-black text-rose-700">
-                      현재 영업 종료
-                    </span>
-                  )}
-                  {isTodayClosed(detailState.data.openingHours) && (
-                    <span className="rounded-full border border-orange-200 bg-orange-100 px-3 py-1.5 text-xs font-black text-orange-700">
-                      오늘 휴무
-                    </span>
-                  )}
-                </div>
-
-                <p><span className="font-bold text-[#1f3550]">주소</span>: {detailState.data.address || '정보 없음'}</p>
-                <p>
-                  <span className="font-bold text-[#1f3550]">평점</span>:{' '}
-                  {detailState.data.rating ? `${detailState.data.rating} (${detailState.data.userRatingsTotal || 0})` : '정보 없음'}
-                </p>
-                <p><span className="font-bold text-[#1f3550]">영업 상태</span>: {detailState.data.businessStatusLabel || '정보 없음'}</p>
-                <p><span className="font-bold text-[#1f3550]">전화번호</span>: {detailState.data.phone || '정보 없음'}</p>
-
-                <div>
-                  <p className="font-bold text-[#1f3550]">영업시간</p>
-                  {detailState.data.openingHoursLocalized.length > 0 ? (
-                    <ul className="mt-1 space-y-1 rounded-xl border border-[#dbeaf9] bg-[#f8fcff] p-3 text-xs">
-                      {detailState.data.openingHoursLocalized.map((line) => (
-                        <li
-                          key={line}
-                          className={line === getTodayOpeningLine(detailState.data.openingHoursLocalized) ? 'font-bold text-[#1f3550]' : ''}
-                        >
-                          {line}
-                        </li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <p className="text-xs text-[#5f89ad]">영업시간 정보 없음</p>
-                  )}
-                </div>
-
-                {detailState.data.reviews.length > 0 && (
-                  <div>
-                    <p className="font-bold text-[#1f3550]">리뷰 요약</p>
-                    <div className="mt-1 space-y-2">
-                      {detailState.data.reviews.map((review, idx) => (
-                        <div key={`${review.authorUrl ? <a href={review.authorUrl} target="_blank" rel="noopener noreferrer">{review.author}</a> : review.author}-${idx}`} className="rounded-xl border border-[#dbeaf9] bg-[#f8fcff] p-3 text-sm sm:text-xs">
-                          <p className="font-bold text-[#2f5f86]">
-                            {review.authorUrl ? <a href={review.authorUrl} target="_blank" rel="noopener noreferrer">{review.author}</a> : review.author}
-                            {review.rating ? ` · ${review.rating}` : ''}
-                          </p>
-                          <p className="mt-1 text-[#4b6177]">{review.text || '리뷰 본문 없음'}</p>
-                        </div>
-                      ))}
-                    </div>
+                  <div className="flex flex-wrap gap-2">
+                    {detailState.data.isOpenNow === true && (
+                      <span className="rounded-full border border-emerald-200 bg-emerald-100 px-3 py-1.5 text-xs font-black text-emerald-700">
+                        현재 영업중
+                      </span>
+                    )}
+                    {detailState.data.isOpenNow === false && (
+                      <span className="rounded-full border border-rose-200 bg-rose-100 px-3 py-1.5 text-xs font-black text-rose-700">
+                        현재 영업 종료
+                      </span>
+                    )}
+                    {isTodayClosed(detailState.data.openingHours) && (
+                      <span className="rounded-full border border-orange-200 bg-orange-100 px-3 py-1.5 text-xs font-black text-orange-700">
+                        오늘 휴무
+                      </span>
+                    )}
                   </div>
-                )}
 
-                <div className="flex flex-wrap gap-2 pt-1">
-                  {detailState.data.website && (
-                    <a
-                      href={detailState.data.website}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="rounded-lg border border-[#cde4f8] bg-[#f5fbff] px-3 py-1.5 text-xs font-bold text-[#2d587a]"
-                    >
-                      웹사이트
-                    </a>
+                  <p>
+                    <span className="font-bold text-[#1f3550]">주소</span>:{" "}
+                    {detailState.data.address || "정보 없음"}
+                  </p>
+                  <p>
+                    <span className="font-bold text-[#1f3550]">평점</span>:{" "}
+                    {detailState.data.rating
+                      ? `${detailState.data.rating} (${detailState.data.userRatingsTotal || 0})`
+                      : "정보 없음"}
+                  </p>
+                  <p>
+                    <span className="font-bold text-[#1f3550]">영업 상태</span>:{" "}
+                    {detailState.data.businessStatusLabel || "정보 없음"}
+                  </p>
+                  <p>
+                    <span className="font-bold text-[#1f3550]">전화번호</span>:{" "}
+                    {detailState.data.phone || "정보 없음"}
+                  </p>
+
+                  <div>
+                    <p className="font-bold text-[#1f3550]">영업시간</p>
+                    {detailState.data.openingHoursLocalized.length > 0 ? (
+                      <ul className="mt-1 space-y-1 rounded-xl border border-[#dbeaf9] bg-[#f8fcff] p-3 text-xs">
+                        {detailState.data.openingHoursLocalized.map((line) => (
+                          <li
+                            key={line}
+                            className={
+                              line ===
+                              getTodayOpeningLine(
+                                detailState.data.openingHoursLocalized,
+                              )
+                                ? "font-bold text-[#1f3550]"
+                                : ""
+                            }
+                          >
+                            {line}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="text-xs text-[#5f89ad]">
+                        영업시간 정보 없음
+                      </p>
+                    )}
+                  </div>
+
+                  {detailState.data.reviews.length > 0 && (
+                    <div>
+                      <p className="font-bold text-[#1f3550]">리뷰 요약</p>
+                      <div className="mt-1 space-y-2">
+                        {detailState.data.reviews.map((review, idx) => (
+                          <div
+                            key={`${
+                              review.authorUrl ? (
+                                <a
+                                  href={review.authorUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                >
+                                  {review.author}
+                                </a>
+                              ) : (
+                                review.author
+                              )
+                            }-${idx}`}
+                            className="rounded-xl border border-[#dbeaf9] bg-[#f8fcff] p-3 text-sm sm:text-xs"
+                          >
+                            <p className="font-bold text-[#2f5f86]">
+                              {review.authorUrl ? (
+                                <a
+                                  href={review.authorUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                >
+                                  {review.author}
+                                </a>
+                              ) : (
+                                review.author
+                              )}
+                              {review.rating ? ` · ${review.rating}` : ""}
+                            </p>
+                            <p className="mt-1 text-[#4b6177]">
+                              {review.text || "리뷰 본문 없음"}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
                   )}
-                  {detailState.data.mapUrl && (
-                    <a
-                      href={detailState.data.mapUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="rounded-lg border border-[#cde4f8] bg-[#f5fbff] px-3 py-1.5 text-xs font-bold text-[#2d587a]"
-                    >
-                      지도에서 보기
-                    </a>
-                  )}
-                </div>
+
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    {detailState.data.website && (
+                      <a
+                        href={detailState.data.website}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="rounded-lg border border-[#cde4f8] bg-[#f5fbff] px-3 py-1.5 text-xs font-bold text-[#2d587a]"
+                      >
+                        웹사이트
+                      </a>
+                    )}
+                    {detailState.data.mapUrl && (
+                      <a
+                        href={detailState.data.mapUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="rounded-lg border border-[#cde4f8] bg-[#f5fbff] px-3 py-1.5 text-xs font-bold text-[#2d587a]"
+                      >
+                        지도에서 보기
+                      </a>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
@@ -1203,15 +1570,15 @@ export default function PlanDetail() {
                   </span>
                 )}
 
-              <button
-                onClick={() => {
-                  setDetailPlace(null);
-                  setDetailState({ loading: false, error: '', data: null });
-                }}
-                className="w-full rounded-xl border border-[#cde4f8] bg-white px-4 py-2 text-sm font-bold text-[#2d587a] transition hover:border-[#1f8ef1] hover:text-[#1f8ef1] sm:w-auto"
-              >
-                닫기
-              </button>
+                <button
+                  onClick={() => {
+                    setDetailPlace(null);
+                    setDetailState({ loading: false, error: "", data: null });
+                  }}
+                  className="w-full rounded-xl border border-[#cde4f8] bg-white px-4 py-2 text-sm font-bold text-[#2d587a] transition hover:border-[#1f8ef1] hover:text-[#1f8ef1] sm:w-auto"
+                >
+                  닫기
+                </button>
               </div>
             </div>
           </div>
@@ -1220,6 +1587,3 @@ export default function PlanDetail() {
     </div>
   );
 }
-
-
-

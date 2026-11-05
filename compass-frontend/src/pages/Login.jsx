@@ -1,42 +1,70 @@
-
-import { Sparkles } from 'lucide-react';
-import { GOOGLE_OAUTH2_URL } from '../utils/api';
+import { ArrowLeft, Navigation2 } from "lucide-react";
+import { Link } from "react-router-dom";
+import { GOOGLE_OAUTH2_URL } from "../utils/api";
 
 export default function Login() {
-  const handleGoogleLogin = () => {
-    window.location.href = GOOGLE_OAUTH2_URL;
-  };
-
   return (
-    <div className="flex min-h-[calc(100vh-76px)] items-center justify-center px-4 py-8">
-      <div className="grid w-full max-w-5xl overflow-hidden rounded-[34px] border border-[#cfe4f7] bg-[#f9fdff]/95 shadow-[0_30px_76px_rgba(68,130,189,0.18)] lg:grid-cols-[1.05fr,1fr]">
-        <div className="hidden bg-gradient-to-br from-[#1f8ef1] via-[#2aa5f8] to-[#0ea5e9] p-10 text-white lg:block">
-          <p className="text-xs font-bold uppercase tracking-[0.18em] text-white/80">Compass Identity</p>
-          <h2 className="serif-display mt-6 text-5xl leading-tight">Plan Less. Travel Better.</h2>
-          <p className="mt-6 max-w-sm text-sm leading-relaxed text-white/85">
-            로그인하고 나에게 맞는 여행을 만들어 보세요.
-            국내/해외 여행 일정을 간단한 입력으로 빠르게 만들어 보세요.
-          </p>
-        </div>
-
-        <div className="p-8 md:p-10">
-          <p className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-[0.16em] text-[#4d7fa8]">
-            <Sparkles size={14} /> Welcome Back
-          </p>
-          <h1 className="mt-3 text-3xl font-black text-[#18324d]">로그인</h1>
-          <p className="mt-2 text-sm text-[#4b6177]">Google 계정으로 바로 로그인하고 여행 계획을 시작하세요.</p>
-
-          <button
-            onClick={handleGoogleLogin}
-            className="mt-8 flex w-full items-center justify-center gap-2 rounded-2xl border border-[#cfe4f7] bg-white px-5 py-3.5 text-sm font-bold text-[#2f4459] transition hover:-translate-y-0.5 hover:border-[#1f8ef1] hover:shadow-[0_10px_24px_rgba(31,142,241,0.18)]"
-          >
-            <img src="https://www.svgrepo.com/show/475656/google-color.svg" alt="Google" className="h-5 w-5" />
-            Google로 시작하기
-          </button>
-
-
-        </div>
-      </div>
+    <div className="login-page app-container">
+      <section className="login-panel reveal-up" aria-labelledby="login-title">
+        <span className="login-symbol">
+          <Navigation2 size={28} strokeWidth={1.6} />
+        </span>
+        <p className="eyebrow">여행 준비를 이어서</p>
+        <h1 id="login-title">
+          반가워요.
+          <br />
+          어디로 떠나 볼까요?
+        </h1>
+        <p className="login-description">
+          Google 계정으로 로그인하면
+          <br />
+          일정을 만들고, 저장하고, 수정할 수 있어요.
+        </p>
+        <button
+          type="button"
+          className="google-login"
+          onClick={() => {
+            window.location.href = GOOGLE_OAUTH2_URL;
+          }}
+        >
+          <svg width="19" height="19" viewBox="0 0 48 48" aria-hidden="true">
+            <path
+              fill="#EA4335"
+              d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5Z"
+            />
+            <path
+              fill="#4285F4"
+              d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6C44.4 38.03 46.98 31.89 46.98 24.55Z"
+            />
+            <path
+              fill="#FBBC05"
+              d="M10.53 28.59A14.4 14.4 0 0 1 9.75 24c0-1.59.27-3.13.78-4.59l-7.98-6.19A23.86 23.86 0 0 0 0 24c0 3.87.93 7.53 2.56 10.78l7.97-6.19Z"
+            />
+            <path
+              fill="#34A853"
+              d="M24 48c6.48 0 11.92-2.13 15.89-5.8l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48Z"
+            />
+          </svg>
+          Google로 계속하기
+        </button>
+        <Link to="/" className="login-back">
+          <ArrowLeft size={15} /> 먼저 둘러보기
+        </Link>
+      </section>
+      <aside className="login-aside">
+        <span>YOUR NEXT CHAPTER</span>
+        <p>
+          계획하는 시간보다,
+          <br />
+          여행하는 시간을 더.
+        </p>
+        <span className="login-aside-line" />
+        <p className="login-aside-caption">
+          완벽한 정답 대신,
+          <br />
+          나에게 맞춰 바꿀 수 있는 여행 초안.
+        </p>
+      </aside>
     </div>
   );
 }

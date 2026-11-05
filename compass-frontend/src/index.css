@@ -1,73 +1,68 @@
 @import url("https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css");
 @import "tailwindcss";
+@import "./workspace.css";
 
 :root {
-    --bg-base: #edf7ff;
-    --surface: #f8fcff;
-    --surface-soft: #eef7ff;
-    --line: #cfe4f7;
-    --text: #162334;
-    --text-muted: #4b5f74;
-    --accent: #1f8ef1;
-    --accent-soft: #d9edff;
-    --accent-strong: #0ea5e9;
+  --bg-base: #f7f8fa;
+  --surface: #ffffff;
+  --surface-soft: #f1f3f6;
+  --line: #e6e9ee;
+  --text: #1b2534;
+  --text-muted: #657184;
+  --accent: #2464e8;
+  --accent-soft: #edf3ff;
+  --accent-strong: #1b50c1;
 }
 
 * {
-    box-sizing: border-box;
+  box-sizing: border-box;
 }
 
 html,
 body,
 #root {
-    min-height: 100%;
+  min-height: 100%;
 }
 
 body {
-    margin: 0;
-    color: var(--text);
-    font-family: "Pretendard", "Apple SD Gothic Neo", sans-serif;
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
-    background:
-        radial-gradient(circle at 10% 12%, rgba(14, 165, 233, 0.15), transparent 32%),
-        radial-gradient(circle at 84% 10%, rgba(59, 130, 246, 0.2), transparent 36%),
-        linear-gradient(180deg, #f5fbff 0%, #eaf5ff 100%);
-    background-attachment: fixed;
+  margin: 0;
+  color: var(--text);
+  font-family: "Pretendard", "Apple SD Gothic Neo", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background: var(--bg-base);
 }
 
 .serif-display {
-    font-family: "Pretendard", sans-serif;
+  font-family: "Pretendard", sans-serif;
 }
 
 .page-shell {
-    min-height: 100vh;
-    position: relative;
-}
-
-.page-shell::before {
-    content: "";
-    position: fixed;
-    inset: 0;
-    pointer-events: none;
-    background-image: radial-gradient(rgba(22, 35, 52, 0.035) 1px, transparent 1px);
-    background-size: 18px 18px;
-    opacity: 0.5;
-    z-index: 0;
+  min-height: 100vh;
+  position: relative;
 }
 
 .reveal-up {
-    animation: revealUp 0.5s ease-out both;
+  animation: revealUp 0.5s ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 @keyframes revealUp {
-    from {
-        opacity: 0;
-        transform: translateY(12px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
-
