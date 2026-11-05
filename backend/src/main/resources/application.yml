@@ -41,8 +41,7 @@ spring:
         credentials-uri: ${GOOGLE_CREDENTIALS_URI}
         chat:
           options:
-            model: gemini-3.1-flash-lite-preview
-            temperature: 0.7
+            model: ${app.ai.model.general}
             functions:
               - currentWeatherFunction
     vectorstore:
@@ -68,7 +67,7 @@ weather:
 app:
   ai:
     model:
-      general: ${AI_MODEL_GENERAL:gemini-3.1-flash-lite-preview}
+      general: ${AI_MODEL_GENERAL:gemini-3.8-flash}
       plan: ${AI_MODEL_PLAN:gemini-3.1-pro-preview}
     chat:
       history-window-messages: ${AI_CHAT_HISTORY_WINDOW_MESSAGES:12}

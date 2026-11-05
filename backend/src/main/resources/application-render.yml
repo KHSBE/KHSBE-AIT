@@ -1,0 +1,31 @@
+server:
+  port: ${PORT:10000}
+  forward-headers-strategy: framework
+  tomcat:
+    threads:
+      max: 20
+      min-spare: 2
+
+spring:
+  autoconfigure:
+    exclude:
+      - org.springframework.ai.vectorstore.pgvector.autoconfigure.PgVectorStoreAutoConfiguration
+      - org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration
+      - org.springframework.boot.autoconfigure.data.redis.RedisRepositoriesAutoConfiguration
+  datasource:
+    url: ${DB_JDBC_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+    hikari:
+      maximum-pool-size: 3
+      minimum-idle: 0
+      connection-timeout: 30000
+      idle-timeout: 60000
+  jpa:
+    # Bootstrap a NEW demo database only; use migrations before production use.
+    hibernate:
+      ddl-auto: ${DB_DDL_AUTO:update}
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: false

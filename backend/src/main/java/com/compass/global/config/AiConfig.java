@@ -23,7 +23,7 @@ public class AiConfig {
     @Primary
     public ChatClient generalChatClient(
             ChatClient.Builder builder,
-            @Value("${app.ai.model.general:gemini-3.1-flash-lite-preview}") String generalModel
+            @Value("${app.ai.model.general:gemini-3.8-flash}") String generalModel
     ) {
         return builder.clone()
                 .defaultSystem(DEFAULT_SYSTEM_PROMPT)
@@ -38,7 +38,7 @@ public class AiConfig {
     ) {
         return builder.clone()
                 .defaultSystem(DEFAULT_SYSTEM_PROMPT)
-                .defaultOptions(GoogleGenAiChatOptions.builder().model(planModel).build())
+                .defaultOptions(GoogleGenAiChatOptions.builder().model(planModel).temperature(0.7).build())
                 .build();
     }
 

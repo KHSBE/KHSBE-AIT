@@ -91,7 +91,6 @@ public class TravelAgentService {
     private final ChatMessageRepository messageRepository;
     private final String generalModelName;
     private final String planModelName;
-    private final String planFallbackModelName;
     private final int historyWindowMessages;
 
     public TravelAgentService(
@@ -101,9 +100,8 @@ public class TravelAgentService {
             RequestQuotaService requestQuotaService,
             ChatSessionRepository sessionRepository,
             ChatMessageRepository messageRepository,
-            @Value("${app.ai.model.general:gemini-3.1-flash-lite-preview}") String generalModelName,
+            @Value("${app.ai.model.general:gemini-3.8-flash}") String generalModelName,
             @Value("${app.ai.model.plan:gemini-3.1-pro-preview}") String planModelName,
-            @Value("${app.ai.model.plan-fallback:gemini-3.1-flash-lite-preview}") String planFallbackModelName,
             @Value("${app.ai.chat.history-window-messages:12}") int historyWindowMessages
     ) {
         this.generalChatClient = generalChatClient;
@@ -114,11 +112,10 @@ public class TravelAgentService {
         this.messageRepository = messageRepository;
         this.generalModelName = generalModelName;
         this.planModelName = planModelName;
-        this.planFallbackModelName = planFallbackModelName;
         this.historyWindowMessages = Math.max(4, historyWindowMessages);
 
         log.debug("[AI-MODEL] initialized general={}, plan={}, fallback={}, historyWindowMessages={}",
-                this.generalModelName, this.planModelName, this.planFallbackModelName, this.historyWindowMessages);
+                this.generalModelName, this.planModelName, this.generalModelName, this.historyWindowMessages);
     }
 
     record ChatAssistantResult(String intent, String message) {
@@ -213,13 +210,13 @@ public class TravelAgentService {
             return createPlanWithClient(planChatClient, converter, request, historySummary);
         } catch (Exception primary) {
             log.warn("[AI-MODEL] plan model failed. model={}, message={}", planModelName, rootCauseMessage(primary));
-            log.debug("[AI-MODEL] fallback attempt with general model={}", planFallbackModelName);
+            log.debug("[AI-MODEL] fallback attempt with general model={}", generalModelName);
 
             try {
                 return createPlanWithClient(generalChatClient, converter, request, historySummary);
             } catch (Exception fallback) {
                 log.error("[AI-MODEL] both primary and fallback model failed. primaryModel={}, fallbackModel={}, root={}",
-                        planModelName, planFallbackModelName, rootCauseMessage(fallback), fallback);
+                        planModelName, generalModelName, rootCauseMessage(fallback), fallback);
                 throw toModelBusinessException(fallback);
             }
         }

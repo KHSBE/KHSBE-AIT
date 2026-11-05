@@ -1,0 +1,11 @@
+.git
+.gradle
+.gradle-local
+build
+out
+src/main/generated
+.env
+.env.*
+secrets
+*.pem
+gcp-sa.json

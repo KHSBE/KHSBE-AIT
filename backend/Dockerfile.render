@@ -1,0 +1,16 @@
+FROM eclipse-temurin:17-jdk-jammy AS build
+WORKDIR /build
+COPY gradlew settings.gradle build.gradle ./
+COPY gradle ./gradle
+COPY src ./src
+RUN chmod +x gradlew && ./gradlew bootJar --no-daemon --console=plain -x test
+RUN cp build/libs/*SNAPSHOT.jar /build/app.jar
+
+FROM eclipse-temurin:17-jre-jammy
+WORKDIR /app
+COPY --from=build /build/app.jar app.jar
+ENV SPRING_PROFILES_ACTIVE=render
+# Leave room for metaspace, native SDKs, thread stacks and direct buffers.
+ENV JAVA_TOOL_OPTIONS="-Xms64m -Xmx256m -XX:+UseSerialGC -XX:+ExitOnOutOfMemoryError"
+EXPOSE 10000
+ENTRYPOINT ["java", "-jar", "app.jar"]

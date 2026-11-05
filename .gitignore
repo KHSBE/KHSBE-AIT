@@ -19,3 +19,9 @@ Thumbs.db
 
 # Secrets
 .env
+
+# Deployment credentials and local archive
+*.pem
+/KHS-BE.zip
+.env.*
+!.env.example
