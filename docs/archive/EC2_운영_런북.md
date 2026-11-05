@@ -1,0 +1,266 @@
+# 과거 EC2 운영 기록
+
+> 2026-11-05 보관. 현재 배포 절차가 아닙니다. 당시 설정은 재검증하지 않았습니다.
+> 현재 배포는 [Render 배포 가이드](../RENDER_DEPLOYMENT.md)를 사용하세요.
+> 환경변수 전체 출력 명령은 비밀 노출 위험이 있으므로 실행·공유하지 마세요.
+
+# 서버 운영 런북
+
+Compass 운영 서버를 켜고, 끄고, 재배포하고, 장애를 확인할 때 사용하는 문서입니다.
+
+## 1. EC2 접속
+
+키 파일이 있는 위치에서 접속합니다.
+
+```bash
+ssh -i "compass-key.pem" ubuntu@<EC2_PUBLIC_IP>
+cd ~/KHSBE-AIT
+```
+
+## 2. 운영 파일 위치
+
+EC2 프로젝트 루트에 있어야 하는 파일/폴더입니다.
+
+```text
+~/KHSBE-AIT
+├─ backend/
+├─ compass-frontend/
+├─ docker-compose.prod.yml
+├─ Caddyfile
+├─ .env
+└─ secrets/
+   └─ gcp-sa.json
+```
+
+주의:
+
+- `.env`와 `secrets/gcp-sa.json`은 GitHub에 올리지 않습니다.
+- 리눅스는 대소문자를 구분하므로 `Caddyfile` 하나만 유지합니다. `caddyfile`을 별도로 만들지 않습니다.
+
+## 3. 운영 환경변수 핵심값
+
+EC2의 `.env`에는 최소한 아래 값이 필요합니다.
+
+```env
+DB_HOST=postgres
+DB_PORT=5432
+DB_NAME=compass
+DB_USERNAME=compass_user
+DB_PASSWORD=...
+
+REDIS_HOST=redis
+REDIS_PORT=6379
+
+CORS_ALLOWED_ORIGINS=https://compass-travel.site,https://www.compass-travel.site
+OAUTH2_REDIRECT_URI=https://www.compass-travel.site/oauth2/redirect
+
+GOOGLE_CLIENT_ID=...
+GOOGLE_CLIENT_SECRET=...
+
+GOOGLE_GENAI_VERTEX_AI=true
+GOOGLE_PROJECT_ID=...
+GOOGLE_CLOUD_LOCATION=global
+GOOGLE_CREDENTIALS_URI=file:/app/secrets/gcp-sa.json
+AI_MODEL_GENERAL=gemini-3.8-flash
+AI_MODEL_PLAN=gemini-3.1-pro-preview
+
+GOOGLE_PLACES_API_KEY=...
+GOOGLE_PLACES_LANGUAGE=ko
+PLACES_VERIFICATION_ENABLED=true
+
+WEATHER_API_KEY=...
+JWT_SECRET=...
+ADMIN_EMAILS=admin@example.com
+
+PLAN_QUOTA_PER_DAY=3
+CHAT_QUOTA_PER_DAY=10
+```
+
+## 4. 서버 시작
+
+전체 서비스를 켭니다.
+
+```bash
+docker compose -f docker-compose.prod.yml up -d
+```
+
+백엔드 코드 또는 `.env` 변경 후에는 백엔드 컨테이너를 다시 빌드/재생성합니다.
+
+```bash
+docker compose -f docker-compose.prod.yml up -d --build --force-recreate backend caddy
+```
+
+Caddy까지 같이 지정하는 이유는 API 리버스 프록시가 항상 켜진 상태를 보장하기 위해서입니다.
+
+## 5. 서버 중지
+
+컨테이너만 끕니다. DB 데이터 볼륨은 유지됩니다.
+
+```bash
+docker compose -f docker-compose.prod.yml down
+```
+
+DB 데이터까지 삭제해야 할 때만 아래 명령을 사용합니다.
+
+```bash
+docker compose -f docker-compose.prod.yml down -v
+```
+
+## 6. 상태 확인
+
+```bash
+docker compose -f docker-compose.prod.yml ps
+```
+
+정상 기준:
+
+- `compass-backend`: `Up`
+- `compass-db`: `Up`
+- `compass-redis`: `Up`
+- `compass-caddy`: `Up`
+
+## 7. 로그 확인
+
+최근 로그:
+
+```bash
+docker compose -f docker-compose.prod.yml logs --tail=200 backend
+docker compose -f docker-compose.prod.yml logs --tail=200 caddy
+docker compose -f docker-compose.prod.yml logs --tail=200 postgres
+docker compose -f docker-compose.prod.yml logs --tail=200 redis
+```
+
+실시간 로그:
+
+```bash
+docker compose -f docker-compose.prod.yml logs -f backend
+```
+
+실시간 로그를 끄려면 `Ctrl + C`를 누릅니다. 컨테이너가 꺼지는 것은 아닙니다.
+
+## 8. 코드 반영
+
+GitHub 최신 코드를 EC2에 반영합니다.
+
+```bash
+git pull origin main
+docker compose -f docker-compose.prod.yml up -d --build --force-recreate backend caddy
+docker compose -f docker-compose.prod.yml ps
+```
+
+프론트엔드는 Vercel이 GitHub main 브랜치 기준으로 자동 배포합니다. EC2에서 프론트엔드 컨테이너를 별도로 실행하지 않습니다.
+
+## 9. 빠른 점검 명령
+
+DB 연결 확인:
+
+```bash
+docker compose -f docker-compose.prod.yml exec postgres pg_isready -U compass_user -d compass
+```
+
+OAuth 시작 엔드포인트 확인:
+
+```bash
+curl -I "https://api.compass-travel.site/oauth2/authorization/google"
+```
+
+CORS preflight 확인:
+
+```bash
+curl -i -X OPTIONS "https://api.compass-travel.site/api/plans" \
+  -H "Origin: https://www.compass-travel.site" \
+  -H "Access-Control-Request-Method: GET"
+```
+
+백엔드 컨테이너 내부 환경변수 확인:
+
+```bash
+docker compose -f docker-compose.prod.yml exec backend printenv | grep -E "GOOGLE_|AI_MODEL_|CORS_|OAUTH2_|PLAN_QUOTA|CHAT_QUOTA"
+```
+
+## 10. DB 직접 확인
+
+```bash
+docker compose -f docker-compose.prod.yml exec postgres psql -U compass_user -d compass
+```
+
+자주 쓰는 SQL:
+
+```sql
+select id, email, nickname, role from users order by id desc;
+select id, title, region, user_id from travel_plans order by id desc;
+select * from user_quota_settings order by user_id;
+```
+
+psql 종료:
+
+```text
+\q
+```
+
+## 11. 자주 나는 이슈
+
+### `column ... does not exist`
+
+코드가 요구하는 DB 컬럼이 운영 DB에 아직 없는 상태입니다. 현재는 Flyway가 없으므로 임시로 SQL을 직접 적용해야 합니다. 장기적으로는 Flyway 도입이 필요합니다.
+
+### `redirect_uri_mismatch`
+
+Google OAuth Console에 아래 운영 콜백이 등록되어 있어야 합니다.
+
+```text
+https://api.compass-travel.site/login/oauth2/code/google
+```
+
+### `Failed to get application default credentials`
+
+`secrets/gcp-sa.json`이 없거나 `GOOGLE_CREDENTIALS_URI=file:/app/secrets/gcp-sa.json`이 잘못된 상태입니다.
+
+### CORS 차단
+
+`.env`의 `CORS_ALLOWED_ORIGINS`에 운영 프론트 도메인이 포함되어야 합니다.
+
+```env
+CORS_ALLOWED_ORIGINS=https://compass-travel.site,https://www.compass-travel.site
+```
+
+### Caddy가 안 켜짐
+
+`Caddyfile` 파일명이 정확한지 확인합니다.
+
+```bash
+ls -al Caddyfile caddyfile
+```
+
+`caddyfile`이 별도로 있으면 삭제하고 `Caddyfile`만 사용합니다.
+
+## 일반 채팅 모델 변경 반영 (Gemini 3.8 Flash)
+
+일반 채팅은 `gemini-3.8-flash`, 일정 생성은 `gemini-3.1-pro-preview`를 사용합니다.
+일정 모델 호출 실패 시 일반 채팅 모델로 대체 호출합니다.
+기존 `AI_MODEL_PLAN_FALLBACK`은 실제 호출에 연결되지 않았던 설정이며 더 이상 사용하지 않습니다.
+
+1. 로컬 변경을 커밋하고 GitHub에 push합니다.
+2. EC2를 시작하고 프로젝트 폴더에서 `git pull`을 실행합니다.
+3. EC2의 `.env`에서 다음 값을 확인합니다. 같은 키를 중복으로 추가하지 말고 기존 값을 수정합니다.
+
+```dotenv
+AI_MODEL_GENERAL=gemini-3.8-flash
+AI_MODEL_PLAN=gemini-3.1-pro-preview
+GOOGLE_CLOUD_LOCATION=global
+```
+
+`.env`는 Git으로 배포되지 않습니다. 로컬 파일을 수정해도 EC2 파일은 별도로 수정해야 합니다.
+아래 명령으로 백엔드를 재빌드하고 Caddy도 시작합니다. DB 볼륨은 삭제하지 않습니다.
+
+```bash
+docker compose -f docker-compose.prod.yml up -d --build --force-recreate backend
+docker compose -f docker-compose.prod.yml up -d caddy
+docker compose -f docker-compose.prod.yml ps
+docker compose -f docker-compose.prod.yml exec backend printenv AI_MODEL_GENERAL AI_MODEL_PLAN GOOGLE_CLOUD_LOCATION
+docker compose -f docker-compose.prod.yml logs --tail=100 backend
+```
+
+프론트 재배포는 필요하지 않습니다. 로그인 후 일반 채팅과 여행 일정 입력 폼 표시를 확인하고,
+일정 생성도 별도로 확인합니다. 모델 변경만으로 DB 저장이나 Places 관련 오류까지 해결되지는 않습니다.
+정식 모델도 수명주기가 있으므로 정기적으로 Google 공식 모델 종료 공지를 확인합니다.

@@ -159,17 +159,11 @@ git push origin feat/example
 
 ## 배포 반영 흐름
 
-프론트엔드는 GitHub main에 push되면 Vercel이 자동 배포합니다.
+현재는 Vercel + Render + Neon입니다. push 후 각 플랫폼의 자동 배포 설정 또는 수동 배포를 확인합니다.
+CI와 배포 게이트는 별도입니다. 환경변수 변경은 Git push와 별개로 플랫폼에 적용해야 합니다.
+특히 VITE_ 변수는 프론트 재빌드가 필요합니다. EC2 SSH 배포 절차는 보관 문서로 분리했습니다.
 
-백엔드는 EC2에서 직접 최신 코드를 당겨와야 합니다.
-
-```bash
-ssh -i "compass-key.pem" ubuntu@<EC2_PUBLIC_IP>
-cd ~/KHSBE-AIT
-git pull origin main
-docker compose -f docker-compose.prod.yml up -d --build --force-recreate backend caddy
-docker compose -f docker-compose.prod.yml ps
-```
+자세한 절차는 [배포 가이드](RENDER_DEPLOYMENT.md)를 따릅니다.
 
 ## 커밋하지 말아야 할 파일
 
