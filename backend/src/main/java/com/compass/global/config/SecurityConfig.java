@@ -61,6 +61,7 @@ public class SecurityConfig {
                     .permitAll()
                     .requestMatchers(
                         "/",
+                        "/healthz",
                         "/api/test/**",
                         "/oauth2/**",
                         "/login/**",

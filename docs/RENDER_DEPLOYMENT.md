@@ -18,10 +18,12 @@
 | Root Directory | backend |
 | Dockerfile Path | ./Dockerfile.render |
 | Docker Build Context | . |
-| Health Check | 빈칸 (기본 TCP 검사) |
+| Health Check | 새 코드 배포 후 /healthz 지정 (기존 버전은 기본 TCP 검사 유지) |
 | Command / Pre-Deploy Command | 빈칸 |
 
-UI가 backend/ 접두사를 자동 표시하면 중복 입력하지 않습니다. 최종 Dockerfile은 backend/Dockerfile.render, 컨텍스트는 backend입니다. /healthz는 구현되어 있지 않습니다.
+UI가 backend/ 접두사를 자동 표시하면 중복 입력하지 않습니다. 최종 Dockerfile은 backend/Dockerfile.render, 컨텍스트는 backend입니다.
+
+새 버전은 GET / 및 /healthz에 JSON 상태를 반환합니다. 배포 후 /healthz의 200 응답을 확인한 다음 Render Settings의 Health Check Path를 /healthz로 지정합니다. 이전 코드가 실행 중일 때 먼저 설정하지 않습니다. 이 체크는 애플리케이션 응답 여부만 확인하며 DB·Google AI 가용성은 보장하지 않습니다.
 
 ## Render 환경변수
 

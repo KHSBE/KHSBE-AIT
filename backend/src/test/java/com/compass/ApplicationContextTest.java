@@ -43,4 +43,29 @@ class ApplicationContextTest {
     mvc.perform(post("/api/auth/refresh").header("Origin", "https://evil.example"))
         .andExpect(status().isForbidden());
   }
+
+  @Test
+  void backendRootAndHealthArePublicAndNotCached() throws Exception {
+    for (String path : new String[] {"/", "/healthz"}) {
+      mvc.perform(get(path))
+          .andExpect(status().isOk())
+          .andExpect(header().string("Cache-Control", "no-store"))
+          .andExpect(jsonPath("$.data.service").value("compass-backend"))
+          .andExpect(jsonPath("$.data.status").value("UP"));
+    }
+  }
+
+  @Test
+  void missingPermittedResourceReturns404InsteadOf500() throws Exception {
+    mvc.perform(get("/login/does-not-exist"))
+        .andExpect(status().isNotFound())
+        .andExpect(jsonPath("$.success").value(false));
+  }
+
+  @Test
+  void refreshWithoutCookieHasTraceAndReturns401InsteadOfProxyError() throws Exception {
+    mvc.perform(post("/api/auth/refresh").header("Origin", "http://localhost:5173"))
+        .andExpect(status().isUnauthorized())
+        .andExpect(header().exists("X-Compass-Request-Id"));
+  }
 }
