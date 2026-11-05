@@ -216,6 +216,12 @@ export default function Planner() {
     } finally {
       sending.current = false;
       setPending(false);
+      fetchWithAuth(buildApiUrl("/api/agent/quota"))
+        .then((response) => (response.ok ? response.json() : null))
+        .then((result) => {
+          if (result?.data) setQuota(result.data);
+        })
+        .catch(() => {});
     }
   };
   return (

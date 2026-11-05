@@ -57,8 +57,13 @@ class GenerationPipelineTest {
     assertEquals("verified-place-111", result.plan().itineraries().get(0).places().get(0).name());
     assertEquals("Source title", result.candidates().get("place-111").sourceTitle());
     assertNull(result.plan().itineraries().get(0).places().get(0).confidence());
+    var schedulePrompts = org.mockito.ArgumentCaptor.forClass(String.class);
     verify(gateway, times(2))
-        .generate(anyString(), notNull(), eq(false), anyDouble(), anyDouble(), anyInt());
+        .generate(
+            schedulePrompts.capture(), notNull(), eq(false), anyDouble(), anyDouble(), anyInt());
+    assertTrue(
+        schedulePrompts.getAllValues().stream()
+            .noneMatch(p -> p.contains("UNNECESSARY_WEEKDAY_DESCRIPTION")));
     verify(catalog, never()).search(anyString(), any(), anyInt());
   }
 
@@ -76,7 +81,13 @@ class GenerationPipelineTest {
         0,
         10,
         10,
-        MissingNode.getInstance(),
+        new ObjectMapper()
+            .valueToTree(
+                Map.of(
+                    "periods",
+                    List.of(),
+                    "weekdayDescriptions",
+                    List.of("UNNECESSARY_WEEKDAY_DESCRIPTION"))),
         MissingNode.getInstance(),
         "https://maps.google.com/?cid=123");
   }
@@ -86,5 +97,91 @@ class GenerationPipelineTest {
         Map.of(
             "candidates",
             List.of(Map.of("content", Map.of("parts", List.of(Map.of("text", text)))))));
+  }
+
+  @Test
+  void transientMapsFailureFallsBackToVerifiedPlacesWithoutInventedGrounding() throws Exception {
+    var mapper = new ObjectMapper().findAndRegisterModules();
+    var gateway = mock(GeminiGateway.class);
+    var catalog = mock(PlaceCatalog.class);
+    var service = new TravelAgentService(gateway, catalog, mapper, new PlanQualityValidator());
+    var date = LocalDate.now(ZoneId.of("Asia/Seoul")).plusDays(20);
+    var request =
+        new PlanRequest(
+            UUID.randomUUID(),
+            "city-123",
+            date,
+            date,
+            null,
+            null,
+            PlanRequest.Companion.SOLO,
+            1,
+            0,
+            0,
+            List.of(PlanRequest.Interest.FOOD),
+            PlanRequest.Pace.RELAXED,
+            null,
+            List.of(),
+            "");
+    when(catalog.details("city-123")).thenReturn(place("city-123", List.of("locality")));
+    when(gateway.generate(anyString(), isNull(), eq(true), anyDouble(), anyDouble(), anyInt()))
+        .thenThrow(
+            new AiUnavailableException(
+                "busy", org.springframework.http.HttpStatus.SERVICE_UNAVAILABLE));
+    when(catalog.search(anyString(), any(), anyInt()))
+        .thenReturn(
+            List.of(
+                place("place-111", List.of("tourist_attraction")),
+                place("place-222", List.of("restaurant"))));
+    String valid =
+        "{\"title\":\"여행\",\"days\":[{\"day\":1,\"theme\":\"산책\",\"places\":[{\"placeId\":\"place-111\",\"startTime\":\"10:00\",\"durationMinutes\":60,\"category\":\"관광\",\"memo\":\"산책\"},{\"placeId\":\"place-222\",\"startTime\":\"12:00\",\"durationMinutes\":60,\"category\":\"식사\",\"memo\":\"점심\"}]}]}";
+    when(gateway.generate(anyString(), notNull(), eq(false), anyDouble(), anyDouble(), anyInt()))
+        .thenReturn(response(mapper, valid));
+    when(gateway.text(any())).thenCallRealMethod();
+    var result = service.generate(request);
+    assertEquals(2, result.plan().itineraries().get(0).places().size());
+    assertTrue(
+        result.candidates().values().stream().allMatch(c -> c.matchedBy().equals("PLACES_API")));
+    assertTrue(
+        result.plan().itineraries().get(0).places().stream()
+            .allMatch(p -> !p.verificationUncertain()));
+    verify(catalog, times(3)).search(anyString(), any(), anyInt());
+  }
+
+  @Test
+  void authenticationAndHardQuotaFailuresDoNotSilentlyFallback() {
+    var gateway = mock(GeminiGateway.class);
+    var catalog = mock(PlaceCatalog.class);
+    var service =
+        new TravelAgentService(
+            gateway,
+            catalog,
+            new ObjectMapper().findAndRegisterModules(),
+            new PlanQualityValidator());
+    var date = LocalDate.now(ZoneId.of("Asia/Seoul")).plusDays(20);
+    var request =
+        new PlanRequest(
+            UUID.randomUUID(),
+            "city-123",
+            date,
+            date,
+            null,
+            null,
+            PlanRequest.Companion.SOLO,
+            1,
+            0,
+            0,
+            List.of(PlanRequest.Interest.FOOD),
+            PlanRequest.Pace.RELAXED,
+            null,
+            List.of(),
+            "");
+    when(catalog.details("city-123")).thenReturn(place("city-123", List.of("locality")));
+    when(gateway.generate(anyString(), isNull(), eq(true), anyDouble(), anyDouble(), anyInt()))
+        .thenThrow(
+            new com.compass.global.error.BusinessException(
+                "quota or auth", org.springframework.http.HttpStatus.BAD_GATEWAY));
+    assertThrows(com.compass.global.error.BusinessException.class, () -> service.generate(request));
+    verify(catalog, never()).search(anyString(), any(), anyInt());
   }
 }
