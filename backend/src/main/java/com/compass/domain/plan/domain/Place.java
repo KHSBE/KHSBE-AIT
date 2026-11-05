@@ -11,27 +11,36 @@ import lombok.*;
 @Builder
 public class Place {
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+  @Id
+  @GeneratedValue(strategy = GenerationType.IDENTITY)
+  private Long id;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "itinerary_id")
-    @JsonIgnore
-    private Itinerary itinerary;
+  @ManyToOne(fetch = FetchType.LAZY)
+  @JoinColumn(name = "itinerary_id")
+  @JsonIgnore
+  private Itinerary itinerary;
 
-    private String placeName;
-    private String googlePlaceId;
-    private String startTime;
-    private Integer durationMinutes;
-    private String category;
-    private Double latitude;  // 위도 (구글 맵 필수)
-    private Double longitude; // 경도 (구글 맵 필수)
-    private Integer visitOrder;
-    private Double confidence;
-    private String matchedBy;
-    private Boolean verificationUncertain;
+  private String placeName;
+  private String googlePlaceId;
+  private String startTime;
+  private Integer durationMinutes;
+  private String category;
+  private Double latitude; // 위도 (구글 맵 필수)
+  private Double longitude; // 경도 (구글 맵 필수)
+  private Integer visitOrder;
+  private Double confidence;
+  private String matchedBy;
 
-    @Column(columnDefinition = "TEXT")
-    private String memo;
+  @Setter
+  @Column(length = 2048)
+  private String sourceUri;
+
+  @Setter
+  @Column(length = 1024)
+  private String sourceTitle;
+
+  private Boolean verificationUncertain;
+
+  @Column(columnDefinition = "TEXT")
+  private String memo;
 }

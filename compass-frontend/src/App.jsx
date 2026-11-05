@@ -1,15 +1,15 @@
-﻿import { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, Link, useNavigate, Navigate } from 'react-router-dom';
 import { LayoutDashboard, UserRound, LogOut, ShieldCheck } from 'lucide-react';
 import Home from './pages/Home';
 import Planner from './pages/Planner';
 import Login from './pages/Login';
-import Signup from './pages/Signup';
+
 import OAuth2Redirect from './pages/OAuth2Redirect';
 import MyPage from './pages/MyPage';
 import PlanDetail from './pages/PlanDetail';
 import Admin from './pages/Admin';
-import { buildApiUrl, fetchWithAuth, getAccessTokenRole } from './utils/api';
+import { buildApiUrl, fetchWithAuth, getAccessTokenRole, logout } from './utils/api';
 
 function ProtectedRoute({ children }) {
   const token = localStorage.getItem('accessToken');
@@ -56,13 +56,10 @@ function Navigation() {
     checkAdmin();
   }, [isLoggedIn]);
 
-  const handleLogout = () => {
-    localStorage.removeItem('accessToken');
-    localStorage.removeItem('refreshToken');
-    alert('로그아웃되었습니다.');
-    navigate('/');
+  const handleLogout = async () => {
+    try { await logout(); navigate('/'); }
+    catch (e) { alert(e.message); }
   };
-
   return (
     <nav className="sticky top-0 z-50 border-b border-[#c9e3fb]/90 bg-[#f6fbff]/90 backdrop-blur-xl">
       <div className="mx-auto flex h-[76px] w-full max-w-7xl items-center justify-between px-4 md:px-8">
@@ -76,12 +73,12 @@ function Navigation() {
             to="/planner"
             className="hidden rounded-full px-4 py-2 text-[#4b6177] transition hover:bg-[#e2f1ff] hover:text-[#1f8ef1] sm:inline-flex"
           >
-            AI 플래너
+            여행 만들기
           </Link>
           <Link
             to="/planner"
             className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-[#d1e5f8] bg-[#f3f9ff] text-[#4b6177] transition hover:border-[#1f8ef1] hover:text-[#1f8ef1] sm:hidden"
-            aria-label="AI 플래너"
+            aria-label="여행 만들기"
           >
             <LayoutDashboard size={17} />
           </Link>
@@ -152,7 +149,7 @@ function App() {
           <Routes>
             <Route path="/" element={<Home />} />
             <Route path="/login" element={<Login />} />
-            <Route path="/signup" element={<Signup />} />
+            <Route path="/signup" element={<Navigate to="/login" replace />} />
             <Route path="/oauth2/redirect" element={<OAuth2Redirect />} />
             <Route
               path="/planner"

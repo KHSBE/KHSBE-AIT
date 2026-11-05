@@ -1,788 +1,638 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
-import { Link } from 'react-router-dom';
+import { useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { useJsApiLoader } from "@react-google-maps/api";
 import {
-  Send,
-  Bot,
-  Calendar,
-  Users,
-  Star,
-  Loader2,
-  PlaneTakeoff,
-  PlaneLanding,
-  BedDouble,
-  MessageSquare,
-  Plus,
-  Trash2,
-  PanelLeftClose,
-  PanelLeftOpen,
+  ArrowLeft,
   ArrowRight,
-  MapPinned
-} from 'lucide-react';
-import { fetchWithAuth, buildApiUrl } from '../utils/api';
+  Check,
+  Compass,
+  Loader2,
+  MapPin,
+  Sparkles,
+  X,
+} from "lucide-react";
+import PlaceSearch from "../components/PlaceSearch";
+import { fetchWithAuth, buildApiUrl } from "../utils/api";
+import "./Planner.css";
 
-const BOT_WELCOME_MESSAGE = '안녕하세요. 일반 대화도 가능하고, 여행 일정 요청 시 입력 폼을 열어 도와드려요.';
-const BOT_NEW_CHAT_MESSAGE = '새로운 여행 계획을 시작해볼까요? 목적지나 스타일을 알려주세요.';
+const LIBRARIES = ["places"];
+const STEPS = [
+  "여행지와 날짜",
+  "함께하는 사람",
+  "나의 여행 스타일",
+  "꼭 반영할 조건",
+  "여행 준비 완료",
+];
+const COMPANIONS = [
+  ["SOLO", "혼자", "내 취향대로, 가볍게"],
+  ["COUPLE", "연인과", "둘만의 시간을 여유롭게"],
+  ["FRIENDS", "친구와", "함께 즐기는 새로운 경험"],
+  ["FAMILY", "가족과", "모두에게 편안한 여행"],
+];
+const INTERESTS = [
+  ["FOOD", "현지 맛집"],
+  ["CAFE", "카페와 디저트"],
+  ["NATURE", "자연과 산책"],
+  ["CULTURE", "문화와 명소"],
+  ["SHOPPING", "쇼핑"],
+  ["EXPERIENCE", "체험과 액티비티"],
+];
+const PACES = [
+  ["RELAXED", "여유롭게", "하루 2~3곳 · 충분한 휴식"],
+  ["BALANCED", "균형 있게", "하루 3~4곳 · 적당한 활동"],
+  ["ACTIVE", "알차게", "하루 4~5곳 · 다양한 경험"],
+];
+const initial = {
+  destination: null,
+  startDate: "",
+  endDate: "",
+  arrivalTime: "",
+  departureTime: "",
+  companion: "SOLO",
+  adults: 1,
+  children: 0,
+  seniors: 0,
+  interests: ["FOOD", "CULTURE"],
+  pace: "BALANCED",
+  accommodation: null,
+  required: [],
+  additionalNotes: "",
+};
+const label = (list, key) => list.find(([id]) => id === key)?.[1] || key;
+const today = () =>
+  new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul" }).format(
+    new Date(),
+  );
+const readDraft = () => {
+  try {
+    const d = JSON.parse(localStorage.getItem("compass.tripDraft.v1"));
+    return d ? { ...initial, ...d } : initial;
+  } catch {
+    return initial;
+  }
+};
 
 export default function Planner() {
-  const [sessions, setSessions] = useState([]);
-  const [currentSessionId, setCurrentSessionId] = useState(null);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-  const [isMobile, setIsMobile] = useState(false);
-
-  const [messages, setMessages] = useState([{ sender: 'bot', text: BOT_WELCOME_MESSAGE }]);
-  const [inputMessage, setInputMessage] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [toast, setToast] = useState({ visible: false, message: '' });
+  const navigate = useNavigate();
+  const [form, setForm] = useState(readDraft);
+  const [step, setStep] = useState(0);
   const [quota, setQuota] = useState(null);
-  const [isQuotaLoading, setIsQuotaLoading] = useState(false);
-  const [savingCandidateKey, setSavingCandidateKey] = useState(null);
-  const [formData, setFormData] = useState({
-    departure: '',
-    dest: '',
-    accommodation: '',
-    startDate: '',
-    endDate: '',
-    companion: '혼자',
-    style: ''
+  const [error, setError] = useState("");
+  const [pending, setPending] = useState(false);
+  const [elapsed, setElapsed] = useState(0);
+  const requestRef = useRef(localStorage.getItem("compass.tripRequest.v1"));
+  const sending = useRef(false);
+  const { isLoaded, loadError } = useJsApiLoader({
+    id: "google-map-script",
+    googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "",
+    libraries: LIBRARIES,
+    language: "ko",
+    region: "KR",
   });
-
-  const messagesEndRef = useRef(null);
-
+  const update = (patch) => {
+    setForm((v) => ({ ...v, ...patch }));
+    setError("");
+    requestRef.current = null;
+    localStorage.removeItem("compass.tripRequest.v1");
+  };
   useEffect(() => {
-    const syncLayout = () => {
-      const mobile = window.innerWidth < 1024;
-      setIsMobile(mobile);
-      setIsSidebarOpen(!mobile);
+    localStorage.setItem("compass.tripDraft.v1", JSON.stringify(form));
+  }, [form]);
+  useEffect(() => {
+    fetchWithAuth(buildApiUrl("/api/agent/quota"))
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (d?.data) setQuota(d.data);
+      })
+      .catch(() => {});
+  }, []);
+  useEffect(() => {
+    if (!pending) return;
+    const timer = setInterval(() => setElapsed((v) => v + 1), 1000);
+    return () => clearInterval(timer);
+  }, [pending]);
+  const validate = () => {
+    if (step === 0) {
+      if (!form.destination)
+        return "검색 결과에서 여행할 도시를 선택해 주세요.";
+      const days =
+        (Date.parse(form.endDate) - Date.parse(form.startDate)) / 86400000 + 1;
+      if (
+        !form.startDate ||
+        !form.endDate ||
+        form.startDate < today() ||
+        days < 1 ||
+        days > 7
+      )
+        return "오늘 이후의 1~7일 여행 날짜를 선택해 주세요.";
+      if (
+        days === 1 &&
+        form.arrivalTime &&
+        form.departureTime &&
+        form.arrivalTime >= form.departureTime
+      )
+        return "출발 시각은 도착 시각보다 늦어야 해요.";
+    }
+    if (
+      step === 1 &&
+      (!Number.isInteger(Number(form.adults)) ||
+        Number(form.adults) < 1 ||
+        Number(form.adults) > 20 ||
+        !Number.isInteger(Number(form.children)) ||
+        Number(form.children) < 0 ||
+        Number(form.children) > 10 ||
+        !Number.isInteger(Number(form.seniors)) ||
+        Number(form.seniors) < 0 ||
+        Number(form.seniors) > 20)
+    )
+      return "여행 인원을 범위 안의 정수로 입력해 주세요.";
+    if (step === 1 && Number(form.seniors) > Number(form.adults))
+      return "어르신 수는 성인 수를 넘을 수 없어요.";
+    if (step === 2 && !form.interests.length)
+      return "관심 있는 여행 스타일을 하나 이상 선택해 주세요.";
+    return "";
+  };
+  const next = () => {
+    const message = validate();
+    if (message) {
+      setError(message);
+      return;
+    }
+    setError("");
+    setStep((s) => Math.min(4, s + 1));
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+  const generate = async () => {
+    if (sending.current) return;
+    sending.current = true;
+    setPending(true);
+    setElapsed(0);
+    setError("");
+    const id = requestRef.current || crypto.randomUUID();
+    requestRef.current = id;
+    localStorage.setItem("compass.tripRequest.v1", id);
+    const payload = {
+      requestId: id,
+      destinationPlaceId: form.destination.place_id,
+      startDate: form.startDate,
+      endDate: form.endDate,
+      arrivalTime: form.arrivalTime || null,
+      departureTime: form.departureTime || null,
+      companion: form.companion,
+      adults: Number(form.adults),
+      children: Number(form.children),
+      seniors: Number(form.seniors),
+      interests: form.interests,
+      pace: form.pace,
+      accommodationPlaceId: form.accommodation?.place_id || null,
+      requiredPlaceIds: form.required.map((p) => p.place_id),
+      additionalNotes: form.additionalNotes.trim(),
     };
-
-    syncLayout();
-    window.addEventListener('resize', syncLayout);
-    return () => window.removeEventListener('resize', syncLayout);
-  }, []);
-
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
-
-  useEffect(() => {
-    if (!toast.visible) return undefined;
-    const timer = setTimeout(() => {
-      setToast({ visible: false, message: '' });
-    }, 2600);
-    return () => clearTimeout(timer);
-  }, [toast.visible]);
-
-  const showQuotaToast = (message) => {
-    setToast({
-      visible: true,
-      message: message || '요청 한도를 초과했습니다. 잠시 후 다시 시도해 주세요.'
-    });
-  };
-
-  const getHeaders = (isJson = false) => {
-    const headers = {};
-    if (isJson) headers['Content-Type'] = 'application/json';
-
-    const token = localStorage.getItem('accessToken');
-    if (token) headers.Authorization = `Bearer ${token}`;
-    return headers;
-  };
-
-  const fetchSessions = useCallback(async () => {
-    if (!localStorage.getItem('accessToken')) return;
-
     try {
-      const response = await fetchWithAuth(buildApiUrl('/api/chat/sessions'), { headers: getHeaders() });
-      if (!response.ok) return;
-      const data = await response.json();
-
-      if (data.success) {
-        setSessions(data.data || []);
-      }
-    } catch (error) {
-      console.error('세션 목록 로딩 실패:', error);
-    }
-  }, []);
-
-  const fetchQuota = useCallback(async () => {
-    if (!localStorage.getItem('accessToken')) return;
-
-    setIsQuotaLoading(true);
-    try {
-      const response = await fetchWithAuth(buildApiUrl('/api/agent/quota'), {
-        headers: getHeaders()
-      });
-
-      if (!response.ok) {
-        return;
-      }
-
-      const data = await response.json();
-      if (data?.success) {
-        setQuota(data.data);
-      }
-    } catch (error) {
-      console.error('쿼터 조회 실패:', error);
-      setQuota(null);
-    } finally {
-      setIsQuotaLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchSessions();
-  }, [fetchSessions]);
-
-  useEffect(() => {
-    fetchQuota();
-  }, [currentSessionId, fetchQuota]);
-
-  const loadSession = async (sessionId) => {
-    setCurrentSessionId(sessionId);
-    setMessages([]);
-    if (isMobile) setIsSidebarOpen(false);
-    setIsLoading(true);
-
-    try {
-      const response = await fetchWithAuth(buildApiUrl(`/api/chat/sessions/${sessionId}/messages`), {
-        headers: getHeaders()
+      const response = await fetchWithAuth(buildApiUrl("/api/agent/plan"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
       });
       const data = await response.json();
-
-      if (data.success) {
-        const history = (data.data || []).map((msg) => ({
-          sender: msg.senderRole === 'USER' ? 'user' : 'bot',
-          text: msg.content
-        }));
-        setMessages(history.length > 0 ? history : [{ sender: 'bot', text: BOT_WELCOME_MESSAGE }]);
-      }
-    } catch (error) {
-      console.error('세션 불러오기 실패:', error);
-      setMessages([{ sender: 'bot', text: '세션을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.' }]);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const startNewChat = () => {
-    setCurrentSessionId(null);
-    setMessages([{ sender: 'bot', text: BOT_NEW_CHAT_MESSAGE }]);
-    if (isMobile) setIsSidebarOpen(false);
-  };
-
-  const deleteSession = async (event, sessionId) => {
-    event.stopPropagation();
-    if (!window.confirm('이 대화 기록을 삭제하시겠습니까?')) return;
-
-    try {
-      await fetchWithAuth(buildApiUrl(`/api/chat/sessions/${sessionId}`), {
-        method: 'DELETE',
-        headers: getHeaders()
-      });
-
-      fetchSessions();
-      if (currentSessionId === sessionId) startNewChat();
-    } catch (error) {
-      console.error('세션 삭제 실패:', error);
-    }
-  };
-
-  const sendMessage = async () => {
-    if (!inputMessage.trim() || isLoading) return;
-
-    const userText = inputMessage.trim();
-    setMessages((prev) => [...prev, { sender: 'user', text: userText }]);
-    setInputMessage('');
-    setIsLoading(true);
-
-    try {
-      const response = await fetchWithAuth(buildApiUrl('/api/agent/chat'), {
-        method: 'POST',
-        headers: getHeaders(true),
-        body: JSON.stringify({
-          message: userText,
-          sessionId: currentSessionId
-        })
-      });
-
-      if (!response.ok) {
-        let errorMessage = '채팅 요청에 실패했습니다.';
-        try {
-          const errorData = await response.json();
-          errorMessage = errorData?.message || errorData?.error || errorMessage;
-        } catch {
-          // ignore parse error
-        }
-        if (response.status === 429) {
-          showQuotaToast(errorMessage);
-        }
-        throw new Error(errorMessage);
-      }
-
-      const data = await response.json();
-      const payload = data?.data ?? data;
-      const sessionId = payload?.sessionId;
-      const botMessage = payload?.message || '응답을 생성하지 못했습니다.';
-      const intent = payload?.intent;
-
-      if (!currentSessionId && sessionId) {
-        setCurrentSessionId(sessionId);
-        fetchSessions();
-      }
-
-      setMessages((prev) => [...prev, { sender: 'bot', text: botMessage }]);
-
-      if (intent === 'PLAN_CREATION') {
-        setTimeout(() => setIsModalOpen(true), 600);
-      }
-
-      await fetchQuota();
-    } catch (error) {
-      console.error('메시지 전송 실패:', error);
-      setMessages((prev) => [...prev, { sender: 'bot', text: '서버 연결에 실패했습니다. 잠시 후 다시 시도해 주세요.' }]);
-      await fetchQuota();
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const submitPlan = async () => {
-    if (!formData.departure || !formData.dest || !formData.startDate || !formData.endDate) {
-      alert('출발지, 목적지, 여행 날짜는 필수입니다.');
-      return;
-    }
-
-    const finalRequest = `출발지: ${formData.departure}, 목적지: ${formData.dest}, 숙소: ${
-      formData.accommodation || '미정(AI가 동선에 맞춰 1곳 추천)'
-    }, 날짜: ${formData.startDate} ~ ${formData.endDate}, 동행: ${formData.companion}, 스타일: ${formData.style}`;
-
-    setIsModalOpen(false);
-    setMessages((prev) => [...prev, { sender: 'user', text: '[여행 정보 입력 완료]' }]);
-    setIsLoading(true);
-
-    try {
-      const response = await fetchWithAuth(buildApiUrl('/api/agent/plan'), {
-        method: 'POST',
-        headers: getHeaders(true),
-        body: JSON.stringify({
-          request: finalRequest,
-          sessionId: currentSessionId
-        })
-      });
-
-      if (!response.ok) {
-        let errorMessage = '일정 생성에 실패했습니다.';
-        try {
-          const errorData = await response.json();
-          errorMessage = errorData?.message || errorData?.error || errorMessage;
-        } catch {
-          // ignore parse error
-        }
-        if (response.status === 429) {
-          showQuotaToast(errorMessage);
-        }
-        throw new Error(errorMessage);
-      }
-
-      const data = await response.json();
-
-      if (data.success && data.data) {
-        setMessages((prev) => [
-          ...prev,
-          { sender: 'bot', text: '좋아요. 아래에 여행 초안을 만들었어요. 확인해보세요.' },
-          { sender: 'bot', isPlanCard: true, planData: data.data }
-        ]);
-        fetchSessions();
-      } else {
-        setMessages((prev) => [...prev, { sender: 'bot', text: '일정 생성에 실패했습니다. 다시 시도해 주세요.' }]);
-      }
-    } catch (error) {
-      console.error('일정 생성 실패:', error);
-      setMessages((prev) => [...prev, { sender: 'bot', text: error?.message || '일정 생성 중 서버 오류가 발생했습니다.' }]);
-    } finally {
-      setIsLoading(false);
-      await fetchQuota();
-    }
-  };
-
-  const applyCandidateToPlanCard = async (messageIndex, dayIndex, placeIndex, candidate) => {
-    const targetMessage = messages[messageIndex];
-    const planData = targetMessage?.planData;
-    const targetDay = planData?.itineraries?.[dayIndex];
-    const currentPlaces = targetDay?.places || [];
-    const planId = planData?.planId;
-    const itineraryId = targetDay?.itineraryId;
-
-    if (!planId || !itineraryId || !currentPlaces.length) {
-      showQuotaToast('저장 대상 일정 정보가 없어 후보 적용을 완료할 수 없습니다.');
-      return;
-    }
-
-    const actionKey = `${messageIndex}-${dayIndex}-${placeIndex}`;
-    setSavingCandidateKey(actionKey);
-
-    const updatedPlaces = currentPlaces.map((place, pIdx) => {
-      if (pIdx !== placeIndex) return place;
-      const nextName = candidate.name || place.placeName || place.name;
-      const nextLat = candidate.lat ?? candidate.latitude ?? place.lat ?? place.latitude ?? 0;
-      const nextLng = candidate.lng ?? candidate.longitude ?? place.lng ?? place.longitude ?? 0;
-      return {
-        ...place,
-        name: nextName,
-        placeName: nextName,
-        googlePlaceId: candidate.googlePlaceId || place.googlePlaceId,
-        lat: nextLat,
-        lng: nextLng,
-        latitude: nextLat,
-        longitude: nextLng,
-        confidence: candidate.confidence ?? place.confidence ?? 1,
-        matchedBy: 'USER_SELECTED_TOP3',
-        verificationUncertain: false,
-        candidates: place.candidates || []
-      };
-    });
-
-    const payloadPlaces = updatedPlaces.map((place) => ({
-      placeName: (place.placeName || place.name || '').trim(),
-      googlePlaceId: place.googlePlaceId || null,
-      startTime: place.startTime || null,
-      durationMinutes: place.durationMinutes ?? null,
-      category: place.category || null,
-      latitude: place.latitude ?? place.lat ?? 0,
-      longitude: place.longitude ?? place.lng ?? 0,
-      memo: place.memo || '',
-      confidence: place.confidence ?? null,
-      matchedBy: place.matchedBy || null,
-      verificationUncertain: !!place.verificationUncertain
-    }));
-
-    try {
-      const response = await fetchWithAuth(buildApiUrl(`/api/plans/${planId}/itineraries/${itineraryId}/places`), {
-        method: 'PUT',
-        headers: getHeaders(true),
-        body: JSON.stringify({ places: payloadPlaces })
-      });
-
-      if (!response.ok) {
-        let errorMessage = '후보 저장에 실패했습니다.';
-        try {
-          const errorData = await response.json();
-          errorMessage = errorData?.message || errorData?.error || errorMessage;
-        } catch {
-          // ignore parse error
-        }
-        throw new Error(errorMessage);
-      }
-
-      setMessages((prev) =>
-        prev.map((msg, idx) => {
-          if (idx !== messageIndex || !msg?.isPlanCard || !msg?.planData) return msg;
-
-          const nextItineraries = (msg.planData.itineraries || []).map((day, dIdx) =>
-            dIdx === dayIndex ? { ...day, places: updatedPlaces } : day
-          );
-
-          return {
-            ...msg,
-            planData: {
-              ...msg.planData,
-              itineraries: nextItineraries
-            }
-          };
-        })
+      if (!response.ok || !data.success)
+        throw new Error(
+          data.message ||
+            "일정을 만들지 못했습니다. 잠시 후 다시 시도해 주세요.",
+        );
+      if (!data.data?.planId)
+        throw new Error(
+          "저장된 일정 정보를 확인하지 못했습니다. 내 일정에서 확인해 주세요.",
+        );
+      localStorage.removeItem("compass.tripDraft.v1");
+      localStorage.removeItem("compass.tripRequest.v1");
+      navigate(`/plans/${data.data.planId}`);
+    } catch (e) {
+      setError(
+        e instanceof TypeError
+          ? "서버 연결이 지연되거나 끊겼습니다. 잠시 후 같은 요청으로 다시 시도해 주세요."
+          : e.message,
       );
-    } catch (error) {
-      console.error('Top3 후보 저장 실패:', error);
-      showQuotaToast(error?.message || '후보 저장 중 오류가 발생했습니다.');
     } finally {
-      setSavingCandidateKey(null);
+      sending.current = false;
+      setPending(false);
     }
   };
-
-  const quotaText = isQuotaLoading && !quota
-    ? '남은 횟수 확인 중...'
-    : quota
-      ? `일정 ${quota.planPerDayRemaining}/${quota.planPerDayLimit} · 채팅 ${quota.chatPerDayRemaining}/${quota.chatPerDayLimit}`
-      : '남은 횟수 -';
-  const plannerInputPlaceholder = isMobile
-    ? '예: 여행 일정 짜줘'
-    : '예: 여행 일정 짜줘 (요청하면 입력 폼이 열려요)';
-
   return (
-    <div className="relative flex h-[calc(100vh-76px)] overflow-hidden bg-[#eef7ff]">
-      {toast.visible && (
-        <div className="pointer-events-none absolute right-4 top-4 z-[100] max-w-[360px] animate-in fade-in slide-in-from-top-2 rounded-xl border border-[#f4c9c9] bg-[#fff4f4] px-4 py-3 text-sm font-semibold text-[#a83f3f] shadow-lg">
-          {toast.message}
+    <div className="trip-builder">
+      <header className="builder-intro">
+        <div>
+          <span className="builder-eyebrow">
+            <Compass size={15} /> YOUR NEXT JOURNEY
+          </span>
+          <h1>가고 싶은 여행을 골라보세요.</h1>
+          <p>
+            당신의 선택을 바탕으로 실제 장소를 확인하고 여행 초안을 만들어요.
+          </p>
         </div>
-      )}
-
-      {isMobile && isSidebarOpen && (
-        <button
-          type="button"
-          aria-label="사이드바 닫기"
-          onClick={() => setIsSidebarOpen(false)}
-          className="absolute inset-0 z-10 bg-black/35"
-        />
-      )}
-
-      <div
-        className={[
-          'flex flex-col overflow-hidden border-r border-[#d6e9fa] bg-[#f9fdff] transition-all duration-300',
-          isMobile
-            ? `absolute left-0 top-0 z-20 h-full w-[86%] max-w-[340px] shrink-0 transform ${
-                isSidebarOpen ? 'translate-x-0' : '-translate-x-full'
-              }`
-            : `${isSidebarOpen ? 'w-72' : 'w-0'} relative h-full shrink-0`
-        ].join(' ')}
-      >
-        <div className="p-4">
-          <button
-            onClick={startNewChat}
-            className="flex w-full items-center gap-2 rounded-2xl border border-[#d2e8fb] bg-white p-3 font-bold text-[#305676] shadow-sm transition hover:border-[#1f8ef1] hover:text-[#1f8ef1]"
-          >
-            <Plus size={18} /> 새 여행 계획하기
-          </button>
-        </div>
-
-        <div className="flex-1 space-y-2 overflow-y-auto p-4 pt-0">
-          <p className="mb-3 ml-2 text-xs font-bold uppercase tracking-[0.12em] text-[#4d7fa8]">최근 대화</p>
-
-          {sessions.length > 0 ? (
-            sessions.map((session) => (
-              <div
-                key={session.id}
-                onClick={() => loadSession(session.id)}
-                className={`group flex cursor-pointer items-center justify-between rounded-xl p-3 transition ${
-                  currentSessionId === session.id
-                    ? 'border border-[#b8dbf8] bg-[#eaf6ff] text-[#1f8ef1]'
-                    : 'text-[#4b6177] hover:bg-[#f2f9ff]'
-                }`}
+        <span className="quota-chip">
+          {quota
+            ? `오늘 ${quota.planPerDayRemaining}/${quota.planPerDayLimit}회 남음`
+            : "나만의 여행 계획"}
+        </span>
+      </header>
+      <div className="builder-layout">
+        <aside className="builder-progress">
+          <p>여행 만들기</p>
+          <ol>
+            {STEPS.map((name, i) => (
+              <li
+                key={name}
+                className={step === i ? "current" : step > i ? "complete" : ""}
               >
-                <div className="flex items-center gap-3 overflow-hidden">
-                  <MessageSquare
-                    size={16}
-                    className={currentSessionId === session.id ? 'text-[#1f8ef1]' : 'text-[#8aa1b7]'}
-                  />
-                  <span className="truncate text-sm font-semibold">{session.sessionTitle}</span>
-                </div>
                 <button
-                  onClick={(event) => deleteSession(event, session.id)}
-                  className="p-1 opacity-0 transition group-hover:opacity-100 hover:text-red-500"
+                  type="button"
+                  disabled={pending || i > step}
+                  onClick={() => {
+                    setStep(i);
+                    setError("");
+                  }}
+                  aria-current={step === i ? "step" : undefined}
                 >
-                  <Trash2 size={14} />
+                  <span>{step > i ? <Check size={15} /> : `0${i + 1}`}</span>
+                  {name}
                 </button>
-              </div>
-            ))
-          ) : (
-            <p className="mt-10 text-center text-sm text-[#8aa1b7]">저장된 대화가 없습니다.</p>
-          )}
-        </div>
-      </div>
-
-      <div className="relative flex flex-1 flex-col bg-transparent">
-        <button
-          onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-          className="absolute left-4 top-4 z-10 rounded-lg border border-[#d2e8fb] bg-white p-2 text-[#4b6177] shadow-sm transition hover:text-[#1f8ef1] lg:hidden"
-        >
-          {isSidebarOpen ? <PanelLeftClose size={20} /> : <PanelLeftOpen size={20} />}
-        </button>
-
-        <div className="flex-1 overflow-y-auto p-4 pt-16 md:p-8 md:pt-8">
-          <div className="mx-auto max-w-3xl space-y-8">
-            {messages.map((msg, index) => (
-              <div
-                key={index}
-                className={`flex gap-4 animate-in fade-in slide-in-from-bottom-2 ${
-                  msg.sender === 'user' ? 'justify-end' : 'justify-start'
-                }`}
-              >
-                {msg.sender === 'bot' && (
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#dff1ff] text-[#1f8ef1] shadow-sm">
-                    <Bot size={20} />
-                  </div>
-                )}
-
-                <div
-                  className={`max-w-[92%] rounded-2xl p-4 sm:max-w-[85%] sm:p-5 ${
-                    msg.sender === 'user'
-                      ? 'rounded-tr-sm bg-[#1f8ef1] text-white shadow-md'
-                      : 'rounded-tl-sm border border-[#d6e9fa] bg-[#f9fdff] text-[#1f3550]'
-                  }`}
-                >
-                  {!msg.isPlanCard && <p className="whitespace-pre-wrap text-[15px] leading-relaxed">{msg.text}</p>}
-
-                  {msg.isPlanCard && msg.planData && (
-                    <div className="space-y-4">
-                      <div className="mb-4 border-b border-[#d6e9fa] pb-3">
-                        <h3 className="text-xl font-bold text-[#1f8ef1]">{msg.planData.title}</h3>
-                        <p className="mt-1 text-sm text-[#4b6177]">
-                          {msg.planData.region} | {msg.planData.startDate} ~ {msg.planData.endDate}
-                        </p>
-                        {msg.planData.accommodation && (
-                          <p className="mt-1 flex items-center gap-1 text-sm font-semibold text-[#2c6ea0]">
-                            <BedDouble size={14} /> {msg.planData.accommodation}
-                          </p>
-                        )}
-                        {msg.planData.planId && (
-                          <div className="mt-4 rounded-2xl border border-[#cde4f8] bg-[#f4faff] p-3">
-                            <p className="flex items-start gap-2 text-sm font-semibold leading-relaxed text-[#305676]">
-                              <MapPinned size={16} className="mt-0.5 shrink-0 text-[#1f8ef1]" />
-                              지도, 장소 상세, 길찾기, 일정 편집은 상세 페이지에서 확인할 수 있어요.
-                            </p>
-                            <Link
-                              to={`/plans/${msg.planData.planId}`}
-                              className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#1f8ef1] px-4 py-3 text-sm font-black text-white shadow-sm transition hover:-translate-y-0.5 hover:bg-[#1878cc] sm:w-auto"
-                            >
-                              상세 일정 보기
-                              <ArrowRight size={16} />
-                            </Link>
-                          </div>
-                        )}
-                      </div>
-
-                      {msg.planData.itineraries?.map((day, dayIndex) => {
-                        const dayValue = day.dayNumber ?? day.day ?? dayIndex + 1;
-                        return (
-                        <div key={day.id ?? dayValue} className="rounded-xl border border-[#cfe4f7] bg-white p-4 shadow-sm">
-                          <h4 className="mb-2 flex items-center gap-2 font-bold text-[#1f3550]">
-                            <span className="rounded bg-[#eaf6ff] px-2 py-0.5 text-sm text-[#1f8ef1]">Day {dayValue}</span>
-                            {day.theme}
-                          </h4>
-                          <ul className="mt-3 space-y-3">
-                            {day.places?.map((place, placeIndex) => (
-                              <li key={placeIndex} className="flex gap-3 text-sm">
-                                <div className="mt-1 flex flex-col items-center">
-                                  <div className="h-2 w-2 rounded-full bg-[#1f8ef1]" />
-                                  {placeIndex !== day.places.length - 1 && (
-                                    <div className="my-1 h-full w-0.5 bg-[#b8dbf8]" />
-                                  )}
-                                </div>
-                                <div>
-                                  <div className="flex flex-wrap items-center gap-1.5">
-                                    {place.startTime && (
-                                      <span className="rounded-full bg-[#eaf6ff] px-2 py-0.5 text-[10px] font-black text-[#1f8ef1]">
-                                        {place.startTime}
-                                      </span>
-                                    )}
-                                    {place.category && (
-                                      <span className="rounded-full border border-[#d6e9fa] bg-white px-2 py-0.5 text-[10px] font-bold text-[#4b6177]">
-                                        {place.category}
-                                      </span>
-                                    )}
-                                    {Number.isFinite(Number(place.durationMinutes)) && (
-                                      <span className="rounded-full border border-[#d6e9fa] bg-white px-2 py-0.5 text-[10px] font-bold text-[#4b6177]">
-                                        {place.durationMinutes}분
-                                      </span>
-                                    )}
-                                  </div>
-                                  <p className="mt-1 font-semibold text-[#1f3550]">{place.placeName || place.name}</p>
-                                  <p className="mt-0.5 text-xs text-[#4b6177]">{place.memo}</p>
-                                  {place.verificationUncertain && (
-                                    <div className="mt-2 space-y-1">
-                                      <span className="inline-flex rounded-full border border-[#f2d5ab] bg-[#fff8ee] px-2 py-1 text-[10px] font-bold text-[#9a5a10]">
-                                        검증 불확실 · 후보 선택 가능
-                                      </span>
-                                      {Array.isArray(place.candidates) && place.candidates.length > 0 && (
-                                        <div className="flex flex-wrap gap-1">
-                                          {place.candidates.slice(0, 3).map((candidate, candidateIndex) => (
-                                            <button
-                                              key={`${candidate.googlePlaceId || candidate.name}-${candidateIndex}`}
-                                              type="button"
-                                              onClick={() => applyCandidateToPlanCard(index, dayIndex, placeIndex, candidate)}
-                                              disabled={savingCandidateKey === `${index}-${dayIndex}-${placeIndex}`}
-                                              className="rounded-md border border-[#d7e9fa] bg-[#f4faff] px-2 py-1 text-[10px] font-bold text-[#2e678d] transition hover:border-[#1f8ef1] hover:text-[#1f8ef1]"
-                                            >
-                                              {candidate.name}
-                                            </button>
-                                          ))}
-                                        </div>
-                                      )}
-                                    </div>
-                                  )}
-                                </div>
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      )})}
-                    </div>
-                  )}
-                </div>
-              </div>
+              </li>
             ))}
-
-            {isLoading && (
-              <div className="flex animate-pulse justify-start gap-4">
-                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#dff1ff] text-[#1f8ef1]">
-                  <Loader2 className="animate-spin" size={20} />
-                </div>
-                <div className="rounded-2xl rounded-tl-sm border border-[#d6e9fa] bg-[#f9fdff] p-4 font-medium text-[#4b6177]">
-                  AI가 답변을 생성하는 중입니다...
-                </div>
-              </div>
-            )}
-            <div ref={messagesEndRef} />
+          </ol>
+          <div className="builder-note">
+            <MapPin size={20} />
+            <strong>실제 장소를 바탕으로</strong>
+            <p>
+              Google Maps 정보를 참고해 장소를 확인해요. 영업시간과 예약 여부는
+              방문 전 다시 확인해 주세요.
+            </p>
           </div>
-        </div>
-
-        <div className="border-t border-[#d6e9fa] bg-[#f9fdff] p-4">
-          <div className="mx-auto flex max-w-3xl flex-col gap-1 rounded-3xl border border-[#d2e8fb] bg-white p-2 shadow-sm transition-all focus-within:border-[#1f8ef1] focus-within:ring-2 focus-within:ring-[#dff1ff] sm:flex-row sm:items-center sm:gap-2 sm:rounded-full">
-            <div className="ml-1 flex shrink-0 items-center">
-              <span className="rounded-full border border-[#d9ebfb] bg-[#f3f9ff] px-3 py-1 text-[11px] font-bold text-[#3d6f95]">
-                {quotaText}
-              </span>
-            </div>
-            <div className="relative w-full sm:flex-1">
-              <input
-                type="text"
-                value={inputMessage}
-                onChange={(event) => setInputMessage(event.target.value)}
-                onKeyDown={(event) => event.key === 'Enter' && sendMessage()}
-                placeholder={plannerInputPlaceholder}
-                className="w-full rounded-full border-none bg-transparent py-3 pl-4 pr-14 text-[14px] focus:outline-none sm:px-6 sm:py-4 sm:text-[15px]"
-              />
-              <button
-                onClick={sendMessage}
-                disabled={isLoading}
-                className="absolute bottom-1 right-1 top-1 flex items-center justify-center rounded-full bg-[#1f8ef1] px-4 text-white shadow-sm transition hover:bg-[#1878cc] disabled:bg-gray-300"
-              >
-                <Send size={18} />
-              </button>
-            </div>
+        </aside>
+        <section className="builder-panel" aria-busy={pending}>
+          <div className="step-caption">
+            STEP {String(step + 1).padStart(2, "0")} / 05
           </div>
-          <p className="mt-3 text-center text-xs text-[#8aa1b7]">
-            자유 대화 가능 · 일정 요청 시 입력 폼이 열립니다.
-          </p>
-          <p className="mt-1 text-center text-xs text-[#8aa1b7]">
-            생성된 일정은 참고용이며, 실제 예약/영업 정보는 별도로 확인해 주세요.
-          </p>
-        </div>
-      </div>
-
-      {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4 backdrop-blur-sm">
-          <div className="max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-[2rem] border border-[#d3e8fb] bg-white shadow-2xl duration-200 animate-in fade-in zoom-in">
-            <div className="relative overflow-hidden bg-gradient-to-r from-[#1f8ef1] to-[#0ea5e9] p-6 text-center text-white sm:p-8">
-              <h2 className="relative z-10 text-3xl font-black">여행 정보 입력</h2>
-              <p className="relative z-10 mt-2 text-sm font-medium text-white/85">더 정확한 일정 생성을 위해 정보를 입력해 주세요.</p>
+          {pending ? (
+            <div className="generation-state" role="status">
+              <div className="generation-orbit">
+                <Sparkles size={36} />
+              </div>
+              <h2>당신의 여행을 설계하고 있어요.</h2>
+              <p>
+                {elapsed < 15
+                  ? "여행 조건과 장소 정보를 확인하고 있어요."
+                  : elapsed < 55
+                    ? "방문할 장소를 찾고, 날짜별로 배치하고 있어요."
+                    : "장소와 시간표를 확인하고 있어요. 잠시만 더 기다려 주세요."}
+              </p>
+              <span>{elapsed}초 경과</span>
+              <small>
+                확인할 장소가 많으면 몇 분 걸릴 수 있어요.
+                <br />
+                같은 요청을 여러 번 보내지 않아도 됩니다.
+              </small>
             </div>
-
-            <div className="space-y-4 bg-[#eef7ff] p-5 sm:p-8">
-              <div className="flex flex-col gap-4 sm:flex-row">
-                <div className="flex-1 rounded-2xl border border-[#d2e8fb] bg-white p-2 shadow-sm transition focus-within:ring-2 focus-within:ring-[#dff1ff]">
-                  <label className="ml-2 mt-1 flex items-center gap-1.5 text-xs font-bold text-[#4b6177]">
-                    <PlaneTakeoff size={14} /> 출발지
-                  </label>
-                  <input
-                    type="text"
-                    className="w-full bg-transparent p-2 font-semibold text-[#1f3550] outline-none"
-                    placeholder="예: 부산"
-                    value={formData.departure}
-                    onChange={(event) => setFormData({ ...formData, departure: event.target.value })}
+          ) : (
+            <>
+              {step === 0 && (
+                <>
+                  <h2>어디로, 언제 떠나나요?</h2>
+                  <p className="step-description">
+                    도시를 고르면 주변 장소까지 함께 살펴볼게요.
+                  </p>
+                  <PlaceSearch
+                    label="여행할 도시"
+                    value={form.destination}
+                    onChange={(destination) =>
+                      update({ destination, required: [], accommodation: null })
+                    }
+                    ready={isLoaded}
+                    city
                   />
-                </div>
-                <div className="flex-1 rounded-2xl border border-[#d2e8fb] bg-white p-2 shadow-sm transition focus-within:ring-2 focus-within:ring-[#dff1ff]">
-                  <label className="ml-2 mt-1 flex items-center gap-1.5 text-xs font-bold text-[#4b6177]">
-                    <PlaneLanding size={14} /> 목적지
-                  </label>
-                  <input
-                    type="text"
-                    className="w-full bg-transparent p-2 font-semibold text-[#1f3550] outline-none"
-                    placeholder="예: 제주도"
-                    value={formData.dest}
-                    onChange={(event) => setFormData({ ...formData, dest: event.target.value })}
+                  {(loadError || !import.meta.env.VITE_GOOGLE_MAPS_API_KEY) && (
+                    <p role="alert" className="field-error">
+                      지도 검색을 불러오지 못했어요. 지도 API 키 설정을 확인해
+                      주세요.
+                    </p>
+                  )}
+                  <div className="field-grid">
+                    <label>
+                      가는 날
+                      <input
+                        type="date"
+                        min={today()}
+                        value={form.startDate}
+                        onChange={(e) => update({ startDate: e.target.value })}
+                      />
+                    </label>
+                    <label>
+                      오는 날
+                      <input
+                        type="date"
+                        min={form.startDate || today()}
+                        value={form.endDate}
+                        onChange={(e) => update({ endDate: e.target.value })}
+                      />
+                    </label>
+                  </div>
+                  <div className="field-grid">
+                    <label>
+                      첫날 여행 시작 시각 <small>선택</small>
+                      <input
+                        type="time"
+                        value={form.arrivalTime}
+                        onChange={(e) =>
+                          update({ arrivalTime: e.target.value })
+                        }
+                      />
+                    </label>
+                    <label>
+                      마지막 날 여행 종료 시각 <small>선택</small>
+                      <input
+                        type="time"
+                        value={form.departureTime}
+                        onChange={(e) =>
+                          update({ departureTime: e.target.value })
+                        }
+                      />
+                    </label>
+                  </div>
+                  <p className="field-hint">
+                    우선 1~7일 여행을 지원해요. 비워둔 시각은 오전 9시~오후 9시
+                    안에서 계획해요.
+                  </p>
+                </>
+              )}
+              {step === 1 && (
+                <>
+                  <h2>누구와 함께하나요?</h2>
+                  <p className="step-description">
+                    함께하는 사람에게 맞춰 여행의 속도를 조절해요.
+                  </p>
+                  <div className="choice-grid">
+                    {COMPANIONS.map(([id, name, desc]) => (
+                      <button
+                        type="button"
+                        key={id}
+                        className={`choice-card ${form.companion === id ? "selected" : ""}`}
+                        aria-pressed={form.companion === id}
+                        onClick={() =>
+                          update({
+                            companion: id,
+                            ...(id === "SOLO"
+                              ? { adults: 1, children: 0, seniors: 0 }
+                              : {}),
+                          })
+                        }
+                      >
+                        <strong>{name}</strong>
+                        <small>{desc}</small>
+                      </button>
+                    ))}
+                  </div>
+                  <div className="field-grid counts">
+                    <label>
+                      성인
+                      <input
+                        type="number"
+                        min="1"
+                        max="20"
+                        disabled={form.companion === "SOLO"}
+                        value={form.adults}
+                        onChange={(e) => update({ adults: e.target.value })}
+                      />
+                    </label>
+                    <label>
+                      아이
+                      <input
+                        type="number"
+                        min="0"
+                        max="10"
+                        disabled={form.companion === "SOLO"}
+                        value={form.children}
+                        onChange={(e) => update({ children: e.target.value })}
+                      />
+                    </label>
+                    <label>
+                      성인 중 어르신
+                      <input
+                        type="number"
+                        min="0"
+                        max="20"
+                        value={form.seniors}
+                        onChange={(e) => update({ seniors: e.target.value })}
+                      />
+                    </label>
+                  </div>
+                </>
+              )}
+              {step === 2 && (
+                <>
+                  <h2>어떤 순간을 좋아하세요?</h2>
+                  <p className="step-description">
+                    관심사를 최대 5개 골라주세요.
+                  </p>
+                  <div className="interest-grid">
+                    {INTERESTS.map(([id, name]) => (
+                      <button
+                        key={id}
+                        type="button"
+                        className={
+                          form.interests.includes(id) ? "selected" : ""
+                        }
+                        aria-pressed={form.interests.includes(id)}
+                        onClick={() =>
+                          update({
+                            interests: form.interests.includes(id)
+                              ? form.interests.filter((v) => v !== id)
+                              : [...form.interests, id].slice(0, 5),
+                          })
+                        }
+                      >
+                        {name}
+                        {form.interests.includes(id) && <Check size={16} />}
+                      </button>
+                    ))}
+                  </div>
+                  <h3>하루를 얼마나 채울까요?</h3>
+                  <div className="pace-list">
+                    {PACES.map(([id, name, desc]) => (
+                      <button
+                        key={id}
+                        type="button"
+                        className={form.pace === id ? "selected" : ""}
+                        aria-pressed={form.pace === id}
+                        onClick={() => update({ pace: id })}
+                      >
+                        <strong>{name}</strong>
+                        <span>{desc}</span>
+                        <span className="radio-dot" />
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+              {step === 3 && (
+                <>
+                  <h2>꼭 반영할 게 있나요?</h2>
+                  <p className="step-description">
+                    모두 선택사항이에요. 여행할 지역 안의 장소를 골라주세요.
+                  </p>
+                  <PlaceSearch
+                    label="예약한 숙소"
+                    value={form.accommodation}
+                    onChange={(accommodation) => update({ accommodation })}
+                    ready={isLoaded}
+                    lodging
+                    hint="미정이면 비워두세요. 예약이나 숙박 가능 여부를 보장하지 않아요."
                   />
-                </div>
-              </div>
-
-              <div className="w-full rounded-2xl border border-[#d2e8fb] bg-white p-2 shadow-sm transition focus-within:ring-2 focus-within:ring-[#dff1ff]">
-                <label className="ml-2 mt-1 flex items-center gap-1.5 text-xs font-bold text-[#4b6177]">
-                  <BedDouble size={14} /> 숙소(선택)
-                </label>
-                <input
-                  type="text"
-                  className="w-full bg-transparent p-2 text-sm font-semibold text-[#1f3550] outline-none"
-                  placeholder="예: 서귀포 시내 호텔"
-                  value={formData.accommodation}
-                  onChange={(event) => setFormData({ ...formData, accommodation: event.target.value })}
-                />
-              </div>
-
-              <div className="flex flex-col gap-4 sm:flex-row">
-                <div className="flex-1 rounded-2xl border border-[#d2e8fb] bg-white p-2 shadow-sm transition focus-within:ring-2 focus-within:ring-[#dff1ff]">
-                  <label className="ml-2 mt-1 flex items-center gap-1.5 text-xs font-bold text-[#4b6177]">
-                    <Calendar size={14} /> 시작일
+                  {form.required.length < 5 && (
+                    <PlaceSearch
+                      key={form.required.length}
+                      label="꼭 가고 싶은 장소"
+                      value={null}
+                      onChange={(p) => {
+                        if (
+                          p &&
+                          !form.required.some((v) => v.place_id === p.place_id)
+                        )
+                          update({ required: [...form.required, p] });
+                      }}
+                      ready={isLoaded}
+                    />
+                  )}
+                  <div className="required-chips">
+                    {form.required.map((p) => (
+                      <span key={p.place_id}>
+                        {p.name}
+                        <button
+                          type="button"
+                          aria-label={`${p.name} 제외`}
+                          onClick={() =>
+                            update({
+                              required: form.required.filter(
+                                (v) => v.place_id !== p.place_id,
+                              ),
+                            })
+                          }
+                        >
+                          <X size={14} />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                  <label className="notes-label">
+                    피하고 싶은 것, 추가 요청
+                    <textarea
+                      maxLength={500}
+                      rows={3}
+                      value={form.additionalNotes}
+                      placeholder="예: 해산물은 제외하고, 계단이 적은 곳을 선호해요."
+                      onChange={(e) =>
+                        update({ additionalNotes: e.target.value })
+                      }
+                    />
                   </label>
-                  <input
-                    type="date"
-                    className="w-full bg-transparent p-2 text-sm font-semibold text-[#1f3550] outline-none"
-                    value={formData.startDate}
-                    onChange={(event) => setFormData({ ...formData, startDate: event.target.value })}
-                  />
+                </>
+              )}
+              {step === 4 && (
+                <>
+                  <h2>{form.destination?.name}, 이렇게 떠나볼까요?</h2>
+                  <p className="step-description">
+                    선택한 조건을 확인해 주세요. 각 항목을 눌러 바꿀 수 있어요.
+                  </p>
+                  <div className="trip-review">
+                    {[
+                      [
+                        "여행지와 날짜",
+                        `${form.destination?.name} · ${form.startDate} ~ ${form.endDate}`,
+                        0,
+                      ],
+                      [
+                        "함께하는 사람",
+                        `${label(COMPANIONS, form.companion)} · 성인 ${form.adults}명 / 아이 ${form.children}명 / 어르신 ${form.seniors}명`,
+                        1,
+                      ],
+                      [
+                        "여행 스타일",
+                        `${form.interests.map((v) => label(INTERESTS, v)).join(", ")} · ${label(PACES, form.pace)}`,
+                        2,
+                      ],
+                      [
+                        "숙소와 필수 장소",
+                        `${form.accommodation?.name || "숙소 미정"} · 필수 장소 ${form.required.length}곳`,
+                        3,
+                      ],
+                    ].map(([title, text, target]) => (
+                      <button
+                        type="button"
+                        key={title}
+                        onClick={() => setStep(target)}
+                      >
+                        <span>
+                          {title}
+                          <strong>{text}</strong>
+                        </span>
+                        <ArrowRight size={17} />
+                      </button>
+                    ))}
+                  </div>
+                  <div className="generation-disclosure">
+                    <Sparkles size={18} />
+                    <p>
+                      AI가 실제 장소 정보를 참고해 만드는 여행 초안이에요. 임시
+                      휴무·예약 여부·실제 이동시간은 방문 전에 확인해 주세요.
+                    </p>
+                  </div>
+                </>
+              )}
+              {error && (
+                <div className="builder-error" role="alert">
+                  {error}
                 </div>
-                <div className="flex-1 rounded-2xl border border-[#d2e8fb] bg-white p-2 shadow-sm transition focus-within:ring-2 focus-within:ring-[#dff1ff]">
-                  <label className="ml-2 mt-1 flex items-center gap-1.5 text-xs font-bold text-[#4b6177]">
-                    <Calendar size={14} /> 종료일
-                  </label>
-                  <input
-                    type="date"
-                    className="w-full bg-transparent p-2 text-sm font-semibold text-[#1f3550] outline-none"
-                    value={formData.endDate}
-                    onChange={(event) => setFormData({ ...formData, endDate: event.target.value })}
-                  />
-                </div>
-              </div>
-
-              <div className="flex flex-col gap-4 sm:flex-row">
-                <div className="flex-1 rounded-2xl border border-[#d2e8fb] bg-white p-2 shadow-sm transition focus-within:ring-2 focus-within:ring-[#dff1ff]">
-                  <label className="ml-2 mt-1 flex items-center gap-1.5 text-xs font-bold text-[#4b6177]">
-                    <Users size={14} /> 동행
-                  </label>
-                  <select
-                    className="w-full cursor-pointer bg-transparent p-2 text-sm font-semibold text-[#1f3550] outline-none"
-                    value={formData.companion}
-                    onChange={(event) => setFormData({ ...formData, companion: event.target.value })}
+              )}
+              <footer className="builder-actions">
+                <button
+                  type="button"
+                  className="back-action"
+                  disabled={step === 0}
+                  onClick={() => {
+                    setStep((v) => v - 1);
+                    setError("");
+                  }}
+                >
+                  <ArrowLeft size={17} /> 이전
+                </button>
+                {step < 4 ? (
+                  <button
+                    className="primary-action"
+                    type="button"
+                    onClick={next}
                   >
-                    <option>혼자</option>
-                    <option>친구와</option>
-                    <option>연인과</option>
-                    <option>가족과</option>
-                  </select>
-                </div>
-                <div className="flex-[2] rounded-2xl border border-[#d2e8fb] bg-white p-2 shadow-sm transition focus-within:ring-2 focus-within:ring-[#dff1ff]">
-                  <label className="ml-2 mt-1 flex items-center gap-1.5 text-xs font-bold text-[#4b6177]">
-                    <Star size={14} /> 여행 스타일
-                  </label>
-                  <input
-                    type="text"
-                    className="w-full bg-transparent p-2 text-sm font-semibold text-[#1f3550] outline-none"
-                    placeholder="예: 맛집, 카페, 자연, 사진"
-                    value={formData.style}
-                    onChange={(event) => setFormData({ ...formData, style: event.target.value })}
-                  />
-                </div>
-              </div>
-
-              <div className="flex flex-col gap-3 pt-2 sm:flex-row">
-                <button
-                  onClick={() => setIsModalOpen(false)}
-                  className="flex-1 rounded-2xl bg-[#dfefff] py-4 font-bold text-[#4b6177] transition hover:bg-[#d0e7ff]"
-                >
-                  취소
-                </button>
-                <button
-                  onClick={submitPlan}
-                  className="flex-[2] rounded-2xl bg-[#1f8ef1] py-4 font-black text-white shadow-lg transition hover:-translate-y-0.5 hover:bg-[#1878cc] hover:shadow-xl"
-                >
-                  AI 일정 생성하기
-                </button>
-              </div>
+                    다음 <ArrowRight size={17} />
+                  </button>
+                ) : (
+                  <button
+                    className="primary-action"
+                    type="button"
+                    disabled={quota?.planPerDayRemaining === 0}
+                    onClick={generate}
+                  >
+                    <Sparkles size={17} /> 여행 일정 만들기
+                  </button>
+                )}
+              </footer>
+            </>
+          )}
+          {pending && (
+            <div className="builder-loading-bar">
+              <Loader2 size={16} className="animate-spin" /> 장소 확인과 일정
+              생성을 진행 중입니다.
             </div>
-          </div>
-        </div>
-      )}
+          )}
+        </section>
+      </div>
     </div>
   );
 }

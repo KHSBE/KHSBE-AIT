@@ -1,117 +1,108 @@
-export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
-
-export const buildApiUrl = (path) => {
-  if (path.startsWith('http://') || path.startsWith('https://')) {
-    return path;
-  }
-  return `${API_BASE_URL}${path.startsWith('/') ? '' : '/'}${path}`;
-};
-
-export const GOOGLE_OAUTH2_URL = buildApiUrl('/oauth2/authorization/google');
-
+export const API_BASE_URL = (
+  import.meta.env.VITE_API_BASE_URL || "http://localhost:8080"
+).replace(/\/$/, "");
+export const buildApiUrl = (path) =>
+  /^https?:\/\//.test(path)
+    ? path
+    : `${API_BASE_URL}${path.startsWith("/") ? "" : "/"}${path}`;
+export const GOOGLE_OAUTH2_URL = buildApiUrl("/oauth2/authorization/google");
 const decodeJwtPayload = (token) => {
-  if (!token) return null;
-
   try {
-    const payload = token.split('.')[1];
-    if (!payload) return null;
-
-    const normalizedPayload = payload.replace(/-/g, '+').replace(/_/g, '/');
-    const jsonPayload = decodeURIComponent(
-      atob(normalizedPayload)
-        .split('')
-        .map((char) => `%${(`00${char.charCodeAt(0).toString(16)}`).slice(-2)}`)
-        .join('')
+    const base = token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
+    return JSON.parse(
+      new TextDecoder().decode(
+        Uint8Array.from(atob(base), (c) => c.charCodeAt(0)),
+      ),
     );
-
-    return JSON.parse(jsonPayload);
   } catch {
     return null;
   }
 };
-
-const isAccessTokenExpired = (token) => {
-  const payload = decodeJwtPayload(token);
-  if (!payload?.exp) return false;
-
-  const expiresAt = payload.exp * 1000;
-  const refreshBufferMs = 30 * 1000;
-  return Date.now() + refreshBufferMs >= expiresAt;
-};
-
-export const getAccessTokenRole = () => {
-  const payload = decodeJwtPayload(localStorage.getItem('accessToken'));
-  return String(payload?.role || 'USER').toUpperCase();
-};
-
-const refreshAccessToken = async () => {
-  const refreshToken = localStorage.getItem('refreshToken');
-  if (!refreshToken) return null;
-
-  const refreshResponse = await fetch(buildApiUrl('/api/auth/refresh'), {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ refreshToken })
+export const getAccessTokenRole = () =>
+  String(
+    decodeJwtPayload(localStorage.getItem("accessToken") || "")?.role || "USER",
+  );
+let refreshPromise;
+const authPost = (path, body) =>
+  fetch(`/api/auth/${path}`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: body ? JSON.stringify(body) : undefined,
   });
-
-  const refreshData = await refreshResponse.json();
-
-  if (!refreshResponse.ok || !refreshData.success || !refreshData.data?.accessToken) {
-    return null;
-  }
-
-  localStorage.setItem('accessToken', refreshData.data.accessToken);
-  return refreshData.data.accessToken;
+const refreshAccessToken = () => {
+  if (!refreshPromise)
+    refreshPromise = (async () => {
+      const response = await authPost("refresh");
+      if (response.status === 401) return null;
+      if (!response.ok)
+        throw new Error(
+          "인증 서버에 연결하지 못했습니다. 잠시 후 다시 시도해 주세요.",
+        );
+      const result = await response.json();
+      if (!result.data?.accessToken)
+        throw new Error("인증 응답을 확인하지 못했습니다.");
+      localStorage.setItem("accessToken", result.data.accessToken);
+      return result.data.accessToken;
+    })().finally(() => {
+      refreshPromise = undefined;
+    });
+  return refreshPromise;
 };
-
-const redirectToLogin = () => {
-  localStorage.clear();
-  window.location.href = '/login';
-};
-
-export const fetchWithAuth = async (url, options = {}) => {
+const codeExchanges = new Map();
+export function exchangeLoginCode(code) {
+  if (!codeExchanges.has(code))
+    codeExchanges.set(
+      code,
+      (async () => {
+        const response = await authPost("exchange", { code });
+        const data = await response.json();
+        if (!response.ok || !data.data?.accessToken)
+          throw new Error(data.message || "로그인 처리에 실패했습니다.");
+        localStorage.removeItem("refreshToken");
+        localStorage.setItem("accessToken", data.data.accessToken);
+      })(),
+    );
+  return codeExchanges.get(code);
+}
+export async function logout() {
+  const response = await authPost("logout");
+  if (!response.ok)
+    throw new Error(
+      "로그아웃 요청에 실패했습니다. 잠시 후 다시 시도해 주세요.",
+    );
+  localStorage.removeItem("accessToken");
+  localStorage.removeItem("refreshToken");
+}
+function redirectToLogin() {
+  localStorage.removeItem("accessToken");
+  localStorage.removeItem("refreshToken");
+  window.location.assign("/login");
+}
+export async function fetchWithAuth(url, options = {}) {
   const requestUrl = buildApiUrl(url);
-  let accessToken = localStorage.getItem('accessToken');
-
-  if (accessToken && isAccessTokenExpired(accessToken)) {
-    accessToken = await refreshAccessToken();
-    if (!accessToken) {
+  let token = localStorage.getItem("accessToken");
+  const payload = decodeJwtPayload(token || "");
+  if (token && (!payload?.exp || payload.exp * 1000 < Date.now() + 30000)) {
+    token = await refreshAccessToken();
+    if (!token) {
       redirectToLogin();
       return new Response(null, { status: 401 });
     }
   }
-
-  const headers = {
-    ...options.headers
+  const send = (access) => {
+    const headers = new Headers(options.headers);
+    if (access) headers.set("Authorization", `Bearer ${access}`);
+    return fetch(requestUrl, { ...options, headers });
   };
-
-  if (accessToken) {
-    headers.Authorization = `Bearer ${accessToken}`;
-  }
-
-  let response = await fetch(requestUrl, { ...options, headers });
-
-  if (response.status !== 401) {
-    return response;
-  }
-
-  try {
-    accessToken = await refreshAccessToken();
-    if (!accessToken) {
-      redirectToLogin();
-      return response;
-    }
-
-    const retryHeaders = {
-      ...options.headers,
-      Authorization: `Bearer ${accessToken}`
-    };
-
-    response = await fetch(requestUrl, { ...options, headers: retryHeaders });
-    return response;
-  } catch {
-    alert('로그인이 만료되었습니다. 다시 로그인해 주세요.');
+  let response = await send(token);
+  if (response.status !== 401) return response;
+  token = await refreshAccessToken();
+  if (!token) {
     redirectToLogin();
     return response;
   }
-};
+  response = await send(token);
+  if (response.status === 401) redirectToLogin();
+  return response;
+}

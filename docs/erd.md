@@ -1,129 +1,30 @@
-# ERD
-
-현재 JPA 엔티티 기준의 주요 테이블 구조입니다.
+# 데이터 구조
 
 ```mermaid
 erDiagram
-    USERS ||--o{ TRAVEL_PLANS : owns
-    USERS ||--o{ CHAT_SESSIONS : owns
-    USERS ||--|| USER_PREFERENCE : has
-    USERS ||--o| USER_QUOTA_SETTINGS : overrides
-    USERS ||--o{ USER_QUOTA_DAILY_RESETS : resets
-
-    TRAVEL_PLANS ||--o{ ITINERARIES : contains
-    ITINERARIES ||--o{ PLACE : contains
-    TRAVEL_PLANS ||--o{ CHAT_SESSIONS : linked
-    CHAT_SESSIONS ||--o{ CHAT_MESSAGES : contains
-
-    USERS {
-        bigint id PK
-        varchar email UK
-        varchar password
-        varchar nickname
-        varchar role
-        datetime created_at
-        datetime updated_at
-    }
-
-    USER_PREFERENCE {
-        bigint id PK
-        bigint user_id FK
-        varchar preferred_category
-        varchar diet_restriction
-        varchar travel_pace
-    }
-
-    TRAVEL_PLANS {
-        bigint id PK
-        bigint user_id FK
-        varchar title
-        varchar region
-        varchar departure
-        varchar companion
-        varchar style
-        varchar accommodation
-        varchar accommodation_place_id
-        double accommodation_latitude
-        double accommodation_longitude
-        varchar accommodation_address
-        double accommodation_confidence
-        boolean accommodation_verification_uncertain
-        date start_date
-        date end_date
-        datetime created_at
-        datetime updated_at
-    }
-
-    ITINERARIES {
-        bigint id PK
-        bigint travel_plan_id FK
-        int day_number
-        date travel_date
-        varchar theme
-    }
-
-    PLACE {
-        bigint id PK
-        bigint itinerary_id FK
-        varchar place_name
-        varchar google_place_id
-        varchar start_time
-        int duration_minutes
-        varchar category
-        double latitude
-        double longitude
-        int visit_order
-        double confidence
-        varchar matched_by
-        boolean verification_uncertain
-        text memo
-    }
-
-    CHAT_SESSIONS {
-        bigint id PK
-        bigint user_id FK
-        bigint plan_id FK
-        varchar session_title
-        datetime created_at
-        datetime updated_at
-    }
-
-    CHAT_MESSAGES {
-        bigint id PK
-        bigint session_id FK
-        varchar sender_role
-        text content
-        datetime sent_at
-    }
-
-    USER_QUOTA_SETTINGS {
-        bigint id PK
-        bigint user_id UK
-        int plan_per_day_limit
-        int chat_per_day_limit
-        datetime created_at
-        datetime updated_at
-    }
-
-    USER_QUOTA_DAILY_RESETS {
-        bigint id PK
-        bigint user_id
-        date quota_date
-        int plan_used_baseline
-        int chat_used_baseline
-        datetime created_at
-        datetime updated_at
-    }
+    users ||--o{ travel_plans : owns
+    travel_plans ||--o{ itineraries : includes
+    itineraries ||--o{ place : visits
+    users ||--o{ plan_generations : requests
+    users ||--o{ plan_usage_days : consumes
+    users ||--o{ auth_grants : authenticates
+    users ||--o| user_quota_settings : overrides
 ```
 
-## 핵심 설계 메모
+사용자 ID 기반 인증/사용량 테이블의 관계 일부는 논리 관계이며 DB FK는 아닙니다.
 
-- `users.role`은 `USER`, `ADMIN` 값을 가지며 관리자 페이지 접근 권한에 사용됩니다.
-- `travel_plans.accommodation_*` 필드는 숙소도 장소처럼 검증하고 지도에 표시하기 위한 필드입니다.
-- `place.confidence`, `place.matched_by`, `place.verification_uncertain`은 Places 검증 결과를 저장합니다.
-- `user_quota_settings`는 사용자별 쿼터 override를 저장합니다.
-- `user_quota_daily_resets`는 관리자가 당일 사용량을 기본값 기준으로 리필할 때 baseline을 저장합니다.
+| 테이블 | 주요 필드 / 불변 조건 |
+| --- | --- |
+| users | email, nickname, role |
+| travel_plans | user_id, destination_place_id, generation_notes, title, region, dates, 선택 숙소 Place ID/좌표 |
+| itineraries | travel_plan_id, day_number, travel_date, theme |
+| place | itinerary_id, visit_order, google_place_id, name, coordinates, start_time, duration_minutes, category, memo, matched_by, source_uri, verification_uncertain |
+| plan_generations | UNIQUE(user_id, request_id), fingerprint, status, attempt, expires_at, quota_date, plan_id |
+| plan_usage_days | UNIQUE(user_id, quota_date), used; 일정 삭제와 독립 |
+| auth_grants | token_hash PK, user_id, family_id, kind, expires_at, used; 원문 토큰 미저장 |
+| user_quota_settings | 사용자별 일일 한도 override |
+| user_quota_daily_resets | 과거 사용량 초기화 기준의 전환용 테이블 |
 
-## 주의 사항
-
-현재 프로젝트는 Hibernate DDL 자동 반영에 의존하는 부분이 있습니다. 운영 안정성을 높이려면 다음 단계로 Flyway를 도입해 스키마 변경 이력을 명시적으로 관리하는 것이 좋습니다.
+confidence 컬럼은 구버전 호환을 위해 남아 있지만 새 생성/수정 결과에는 확률을 넣지 않습니다.
+채팅/사용자 선호 엔티티는 기존 데이터 보존용으로 남아 있으며 새 API에서 사용하지 않습니다.
+Flyway V1은 신규 상태 테이블과 기존 일정/장소의 신규 컬럼을 다룹니다. 기존 스키마 전체 정의를 대체하지 않습니다.

@@ -1,192 +1,214 @@
 package com.compass.domain.agent.application;
 
-import com.compass.domain.agent.dao.ChatMessageRepository;
-import com.compass.domain.agent.dao.UserQuotaDailyResetRepository;
-import com.compass.domain.agent.dao.UserQuotaSettingRepository;
-import com.compass.domain.agent.domain.UserQuotaDailyReset;
-import com.compass.domain.agent.domain.UserQuotaSetting;
-import com.compass.domain.agent.dto.QuotaStatusResponse;
+import com.compass.domain.agent.dao.*;
+import com.compass.domain.agent.domain.*;
+import com.compass.domain.agent.dto.*;
 import com.compass.domain.plan.dao.TravelPlanRepository;
+import com.compass.domain.user.dao.UserRepository;
 import com.compass.global.error.BusinessException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import java.security.MessageDigest;
+import java.time.*;
+import java.util.HexFormat;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDate;
-import java.time.LocalDateTime;
-
 @Service
 @RequiredArgsConstructor
 public class RequestQuotaService {
+  private static final ZoneId ZONE = ZoneId.of("Asia/Seoul");
+  private final PlanGenerationRepository generations;
+  private final PlanUsageDayRepository usage;
+  private final UserQuotaSettingRepository settings;
+  private final UserQuotaDailyResetRepository resets;
+  private final TravelPlanRepository plans;
+  private final UserRepository users;
+  private final ObjectMapper mapper;
 
-    private final TravelPlanRepository travelPlanRepository;
-    private final ChatMessageRepository chatMessageRepository;
-    private final UserQuotaSettingRepository userQuotaSettingRepository;
-    private final UserQuotaDailyResetRepository userQuotaDailyResetRepository;
+  @Value("${app.quota.plan-per-day:3}")
+  private int planPerDayLimit;
 
-    @Value("${app.quota.plan-per-day:3}")
-    private int planPerDayLimit;
-
-    @Value("${app.quota.chat-per-day:10}")
-    private int chatPerDayLimit;
-
-    public void assertPlanCreationAllowed(Long userId) {
-        QuotaAdminDetail detail = getQuotaAdminDetail(userId);
-        if (detail.planPerDayUsed() >= detail.effectivePlanPerDayLimit()) {
-            throw new BusinessException(
-                    "하루 일정 생성 한도(" + detail.effectivePlanPerDayLimit() + "회)를 초과했습니다.",
-                    HttpStatus.TOO_MANY_REQUESTS
-            );
-        }
+  @Transactional
+  public Ticket reserve(Long userId, PlanRequest request) {
+    lock(userId);
+    String hash;
+    try {
+      hash =
+          HexFormat.of()
+              .formatHex(
+                  MessageDigest.getInstance("SHA-256").digest(mapper.writeValueAsBytes(request)));
+    } catch (Exception e) {
+      throw new IllegalStateException(e);
     }
-
-    public void assertChatAllowedToday(Long userId) {
-        QuotaAdminDetail detail = getQuotaAdminDetail(userId);
-        if (detail.chatPerDayUsed() >= detail.effectiveChatPerDayLimit()) {
-            throw new BusinessException(
-                    "하루 채팅 한도(" + detail.effectiveChatPerDayLimit() + "회)를 초과했습니다.",
-                    HttpStatus.TOO_MANY_REQUESTS
-            );
-        }
+    var existing =
+        generations.findByUserIdAndRequestId(userId, request.requestId().toString()).orElse(null);
+    Instant now = Instant.now();
+    if (existing != null) {
+      if (!hash.equals(existing.getFingerprint()))
+        throw new BusinessException("같은 요청 ID의 조건을 변경할 수 없습니다.", HttpStatus.CONFLICT);
+      if ("SUCCEEDED".equals(existing.getStatus()))
+        return new Ticket(existing.getId(), existing.getPlanId(), existing.getAttempt());
+      if ("PENDING".equals(existing.getStatus()) && existing.getExpiresAt().isAfter(now))
+        throw new BusinessException("이미 일정을 생성하고 있습니다. 잠시 기다려 주세요.", HttpStatus.CONFLICT);
     }
+    LocalDate today = LocalDate.now(ZONE);
+    PlanUsageDay day = day(userId, today);
+    long active =
+        generations.countByUserIdAndQuotaDateAndStatusAndExpiresAtAfter(
+            userId, today, "PENDING", now);
+    if (day.getUsed() + active >= limit(userId))
+      throw new BusinessException("하루 일정 생성 한도를 초과했습니다.", HttpStatus.TOO_MANY_REQUESTS);
+    if (generations.countByUserIdAndStatusAndExpiresAtAfter(userId, "PENDING", now) > 0)
+      throw new BusinessException("진행 중인 일정 생성이 있습니다.", HttpStatus.CONFLICT);
+    var record = existing == null ? new PlanGeneration() : existing;
+    record.setUserId(userId);
+    record.setRequestId(request.requestId().toString());
+    record.setFingerprint(hash);
+    record.setQuotaDate(today);
+    record.setStatus("PENDING");
+    record.setExpiresAt(now.plusSeconds(600));
+    record.setPlanId(null);
+    record.setAttempt(record.getAttempt() + 1);
+    generations.save(record);
+    return new Ticket(record.getId(), null, record.getAttempt());
+  }
 
-    public QuotaStatusResponse getQuotaStatus(Long userId) {
-        QuotaAdminDetail detail = getQuotaAdminDetail(userId);
-        return new QuotaStatusResponse(
-                detail.effectivePlanPerDayLimit(),
-                detail.planPerDayUsed(),
-                detail.planPerDayRemaining(),
-                detail.effectiveChatPerDayLimit(),
-                detail.chatPerDayUsed(),
-                detail.chatPerDayRemaining()
-        );
-    }
+  @Transactional
+  public void complete(Long userId, Ticket ticket, Long planId) {
+    lock(userId);
+    var record = generations.findById(ticket.generationId()).orElseThrow();
+    if (record.getAttempt() != ticket.attempt()
+        || !record.getUserId().equals(userId)
+        || !"PENDING".equals(record.getStatus())
+        || record.getExpiresAt().isBefore(Instant.now()))
+      throw new BusinessException("생성 요청이 만료됐습니다. 다시 시도해 주세요.", HttpStatus.CONFLICT);
+    var day = day(userId, record.getQuotaDate());
+    day.setUsed(day.getUsed() + 1);
+    record.setStatus("SUCCEEDED");
+    record.setPlanId(planId);
+  }
 
-    public QuotaAdminDetail getQuotaAdminDetail(Long userId) {
-        LocalDate today = LocalDate.now();
+  @Transactional
+  public void fail(Long userId, Ticket ticket) {
+    lock(userId);
+    generations
+        .findById(ticket.generationId())
+        .filter(
+            r ->
+                r.getAttempt() == ticket.attempt()
+                    && r.getUserId().equals(userId)
+                    && "PENDING".equals(r.getStatus()))
+        .ifPresent(r -> r.setStatus("FAILED"));
+  }
 
-        UserQuotaSetting setting = userQuotaSettingRepository.findByUserId(userId).orElse(null);
-        UserQuotaDailyReset dailyReset = userQuotaDailyResetRepository.findByUserIdAndQuotaDate(userId, today).orElse(null);
+  @Transactional
+  public QuotaStatusResponse getQuotaStatus(Long userId) {
+    var d = getQuotaAdminDetail(userId);
+    return new QuotaStatusResponse(
+        d.effectivePlanPerDayLimit(), d.planPerDayUsed(), d.planPerDayRemaining(), 0, 0, 0);
+  }
 
-        int defaultPlanLimit = getDefaultPlanLimit();
-        int defaultChatLimit = getDefaultChatLimit();
-        Integer overridePlanLimit = setting != null ? normalizeOverride(setting.getPlanPerDayLimit()) : null;
-        Integer overrideChatLimit = setting != null ? normalizeOverride(setting.getChatPerDayLimit()) : null;
+  @Transactional
+  public QuotaAdminDetail getQuotaAdminDetail(Long userId) {
+    lock(userId);
+    LocalDate today = LocalDate.now(ZONE);
+    var setting = settings.findByUserId(userId).orElse(null);
+    Integer override = setting == null ? null : setting.getPlanPerDayLimit();
+    int effective = override == null ? Math.max(1, planPerDayLimit) : override;
+    int consumed = day(userId, today).getUsed();
+    int reserved =
+        (int)
+            generations.countByUserIdAndQuotaDateAndStatusAndExpiresAtAfter(
+                userId, today, "PENDING", Instant.now());
+    return new QuotaAdminDetail(
+        Math.max(1, planPerDayLimit),
+        0,
+        override,
+        null,
+        effective,
+        0,
+        consumed + reserved,
+        Math.max(0, effective - consumed - reserved),
+        0,
+        0);
+  }
 
-        int effectivePlanLimit = overridePlanLimit != null ? overridePlanLimit : defaultPlanLimit;
-        int effectiveChatLimit = overrideChatLimit != null ? overrideChatLimit : defaultChatLimit;
+  @Transactional
+  public void upsertUserQuotaLimit(Long userId, Integer planLimit, Integer ignoredChatLimit) {
+    lock(userId);
+    if (planLimit == null || planLimit < 1 || planLimit > 1000)
+      throw new BusinessException("일정 생성 한도는 1~1000 사이 정수여야 합니다.", HttpStatus.BAD_REQUEST);
+    var setting =
+        settings
+            .findByUserId(userId)
+            .orElseGet(() -> UserQuotaSetting.builder().userId(userId).build());
+    setting.update(planLimit, null);
+    settings.save(setting);
+  }
 
-        int rawPlanUsed = (int) getPlanUsedByDate(userId, today);
-        int rawChatUsed = (int) getChatUsedByDate(userId, today);
+  @Transactional
+  public void resetQuotaToDefaultAndRefillToday(Long userId) {
+    lock(userId);
+    settings.deleteAllByUserId(userId);
+    day(userId, LocalDate.now(ZONE)).setUsed(0);
+  }
 
-        int planBaseline = dailyReset != null ? safeBaseline(dailyReset.getPlanUsedBaseline()) : 0;
-        int chatBaseline = dailyReset != null ? safeBaseline(dailyReset.getChatUsedBaseline()) : 0;
+  private int limit(Long userId) {
+    return settings
+        .findByUserId(userId)
+        .map(UserQuotaSetting::getPlanPerDayLimit)
+        .orElse(Math.max(1, planPerDayLimit));
+  }
 
-        int adjustedPlanUsed = Math.max(0, rawPlanUsed - planBaseline);
-        int adjustedChatUsed = Math.max(0, rawChatUsed - chatBaseline);
+  private void lock(Long userId) {
+    users
+        .lockById(userId)
+        .orElseThrow(() -> new BusinessException("사용자를 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
+  }
 
-        return new QuotaAdminDetail(
-                defaultPlanLimit,
-                defaultChatLimit,
-                overridePlanLimit,
-                overrideChatLimit,
-                effectivePlanLimit,
-                effectiveChatLimit,
-                adjustedPlanUsed,
-                Math.max(0, effectivePlanLimit - adjustedPlanUsed),
-                adjustedChatUsed,
-                Math.max(0, effectiveChatLimit - adjustedChatUsed)
-        );
-    }
+  private PlanUsageDay day(Long userId, LocalDate date) {
+    return usage
+        .findByUserIdAndQuotaDate(userId, date)
+        .orElseGet(
+            () -> {
+              var d = new PlanUsageDay();
+              d.setUserId(userId);
+              d.setQuotaDate(date);
+              var start =
+                  date.atStartOfDay(ZONE).withZoneSameInstant(ZoneOffset.UTC).toLocalDateTime();
+              var end =
+                  date.plusDays(1)
+                      .atStartOfDay(ZONE)
+                      .withZoneSameInstant(ZoneOffset.UTC)
+                      .toLocalDateTime();
+              int baseline =
+                  resets
+                      .findByUserIdAndQuotaDate(userId, date)
+                      .map(UserQuotaDailyReset::getPlanUsedBaseline)
+                      .orElse(0);
+              d.setUsed(
+                  (int)
+                      Math.max(
+                          0,
+                          plans.countByUserIdAndCreatedAtBetween(userId, start, end) - baseline));
+              return usage.save(d);
+            });
+  }
 
-    @Transactional
-    public void upsertUserQuotaLimit(Long userId, Integer planPerDayLimit, Integer chatPerDayLimit) {
-        Integer normalizedPlan = normalizeOverride(planPerDayLimit);
-        Integer normalizedChat = normalizeOverride(chatPerDayLimit);
+  public record Ticket(Long generationId, Long existingPlanId, int attempt) {}
 
-        if (normalizedPlan == null && normalizedChat == null) {
-            throw new BusinessException("사용자 쿼터 값이 비어 있습니다.", HttpStatus.BAD_REQUEST);
-        }
-
-        UserQuotaSetting setting = userQuotaSettingRepository.findByUserId(userId)
-                .orElseGet(() -> UserQuotaSetting.builder().userId(userId).build());
-
-        setting.update(normalizedPlan, normalizedChat);
-        userQuotaSettingRepository.save(setting);
-    }
-
-    @Transactional
-    public void clearUserQuotaLimit(Long userId) {
-        userQuotaSettingRepository.deleteAllByUserId(userId);
-    }
-
-    @Transactional
-    public void resetQuotaToDefaultAndRefillToday(Long userId) {
-        clearUserQuotaLimit(userId);
-
-        LocalDate today = LocalDate.now();
-        int rawPlanUsed = (int) getPlanUsedByDate(userId, today);
-        int rawChatUsed = (int) getChatUsedByDate(userId, today);
-
-        UserQuotaDailyReset reset = userQuotaDailyResetRepository.findByUserIdAndQuotaDate(userId, today)
-                .orElseGet(() -> UserQuotaDailyReset.builder()
-                        .userId(userId)
-                        .quotaDate(today)
-                        .planUsedBaseline(0)
-                        .chatUsedBaseline(0)
-                        .build());
-
-        reset.updateBaselines(rawPlanUsed, rawChatUsed);
-        userQuotaDailyResetRepository.save(reset);
-    }
-
-    private int getDefaultPlanLimit() {
-        return Math.max(1, planPerDayLimit);
-    }
-
-    private int getDefaultChatLimit() {
-        return Math.max(1, chatPerDayLimit);
-    }
-
-    private Integer normalizeOverride(Integer value) {
-        if (value == null) {
-            return null;
-        }
-        if (value < 1) {
-            throw new BusinessException("쿼터 값은 1 이상이어야 합니다.", HttpStatus.BAD_REQUEST);
-        }
-        return value;
-    }
-
-    private int safeBaseline(Integer baseline) {
-        return baseline == null ? 0 : Math.max(0, baseline);
-    }
-
-    private long getPlanUsedByDate(Long userId, LocalDate date) {
-        LocalDateTime start = date.atStartOfDay();
-        LocalDateTime end = date.plusDays(1).atStartOfDay();
-        return travelPlanRepository.countByUserIdAndCreatedAtBetween(userId, start, end);
-    }
-
-    private long getChatUsedByDate(Long userId, LocalDate date) {
-        LocalDateTime start = date.atStartOfDay();
-        LocalDateTime end = date.plusDays(1).atStartOfDay();
-        return chatMessageRepository.countBySessionUserIdAndSenderRoleAndSentAtBetween(userId, "USER", start, end);
-    }
-
-    public record QuotaAdminDetail(
-            int defaultPlanPerDayLimit,
-            int defaultChatPerDayLimit,
-            Integer overridePlanPerDayLimit,
-            Integer overrideChatPerDayLimit,
-            int effectivePlanPerDayLimit,
-            int effectiveChatPerDayLimit,
-            int planPerDayUsed,
-            int planPerDayRemaining,
-            int chatPerDayUsed,
-            int chatPerDayRemaining
-    ) {
-    }
+  public record QuotaAdminDetail(
+      int defaultPlanPerDayLimit,
+      int defaultChatPerDayLimit,
+      Integer overridePlanPerDayLimit,
+      Integer overrideChatPerDayLimit,
+      int effectivePlanPerDayLimit,
+      int effectiveChatPerDayLimit,
+      int planPerDayUsed,
+      int planPerDayRemaining,
+      int chatPerDayUsed,
+      int chatPerDayRemaining) {}
 }

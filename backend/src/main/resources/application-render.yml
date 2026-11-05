@@ -7,11 +7,6 @@ server:
       min-spare: 2
 
 spring:
-  autoconfigure:
-    exclude:
-      - org.springframework.ai.vectorstore.pgvector.autoconfigure.PgVectorStoreAutoConfiguration
-      - org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration
-      - org.springframework.boot.autoconfigure.data.redis.RedisRepositoriesAutoConfiguration
   datasource:
     url: ${DB_JDBC_URL}
     username: ${DB_USERNAME}
@@ -29,3 +24,7 @@ spring:
     properties:
       hibernate:
         format_sql: false
+
+app:
+  auth:
+    secure-cookies: true

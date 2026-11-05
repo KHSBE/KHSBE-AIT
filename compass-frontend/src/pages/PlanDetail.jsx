@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import {
   MapPin,
@@ -18,9 +18,13 @@ import {
 } from 'lucide-react';
 import { GoogleMap, useJsApiLoader, Marker, Polyline } from '@react-google-maps/api';
 import { fetchWithAuth, buildApiUrl } from '../utils/api';
+import { searchPlacesNew, placeDetailNew } from '../utils/places';
 
-const GOOGLE_MAP_LIBRARIES = ['places'];
-const DEFAULT_ROUTE_TRAVEL_MODE = 'DRIVING';
+const isGoogleMapsSource = (value) => {
+  try { const u = new URL(value); return u.protocol === 'https:' && ['maps.google.com', 'www.google.com', 'google.com'].includes(u.hostname); }
+  catch { return false; }
+};const GOOGLE_MAP_LIBRARIES = ['places'];
+
 
 const MAP_SIMPLIFIED_STYLES = [
   { featureType: 'poi.business', stylers: [{ visibility: 'off' }] },
@@ -66,11 +70,6 @@ const toLatLngLiteral = (place) => ({
   lng: Number(place.longitude)
 });
 
-const toPolylinePoint = (point) => ({
-  lat: typeof point?.lat === 'function' ? point.lat() : Number(point?.lat),
-  lng: typeof point?.lng === 'function' ? point.lng() : Number(point?.lng)
-});
-
 const isMobileViewport = () =>
   typeof window !== 'undefined' && window.matchMedia('(max-width: 1023px)').matches;
 
@@ -99,72 +98,14 @@ const getCurrentWeekdayLabels = () => {
   return [en, ko, ko.replace('요일', '')];
 };
 
-const getVerificationBadge = (place) => {
-  if (place?.verificationUncertain === true) {
-    return {
-      label: '장소 검증 불확실',
-      className: 'border-orange-200 bg-orange-50 text-orange-700'
-    };
-  }
-
-  const confidence = Number(place?.confidence);
-  if (Number.isFinite(confidence)) {
-    return {
-      label: `Places 검증 ${Math.round(confidence * 100)}%`,
-      className: 'border-emerald-200 bg-emerald-50 text-emerald-700'
-    };
-  }
-
-  if (place?.googlePlaceId) {
-    return {
-      label: '장소 검증됨',
-      className: 'border-emerald-200 bg-emerald-50 text-emerald-700'
-    };
-  }
-
-  return null;
-};
-
-const computeRouteSegment = async (RouteClass, originPlace, destinationPlace, travelMode) => {
-  const { routes } = await RouteClass.computeRoutes({
-    origin: toLatLngLiteral(originPlace),
-    destination: toLatLngLiteral(destinationPlace),
-    travelMode,
-    fields: ['path']
-  });
-
-  const route = routes?.[0];
-  const rawPath = route?.path || [];
-  const path = rawPath
-    .map(toPolylinePoint)
-    .filter((point) => Number.isFinite(point.lat) && Number.isFinite(point.lng));
-  return { path };
-};
-
-const buildRoutePathFromComputeRoutes = async (RouteClass, places, travelMode) => {
-  if (!places.length) return { path: [] };
-  if (places.length === 1) return { path: [toLatLngLiteral(places[0])] };
-
-  const mergedPath = [];
-
-  for (let i = 0; i < places.length - 1; i += 1) {
-    const fromPlace = places[i];
-    const toPlace = places[i + 1];
-    const segmentResult = await computeRouteSegment(RouteClass, fromPlace, toPlace, travelMode);
-
-    const segmentPath = [...segmentResult.path];
-    if (segmentPath.length > 0) {
-      if (mergedPath.length > 0) segmentPath.shift();
-      mergedPath.push(...segmentPath);
-    }
-
-  }
-
-  return {
-    path: mergedPath.length ? mergedPath : places.map(toLatLngLiteral)
+const getVerificationBadge = (place, editing = false) => {
+  if (editing && place?.matchedBy?.startsWith("USER_")) return { label: "저장 시 장소 확인", className: "bg-sky-50 text-sky-700" };
+  if (place?.verificationUncertain === true) return { label: '확인 필요', className: 'bg-orange-50 text-orange-700' };
+  if (place?.googlePlaceId && place?.matchedBy && place.matchedBy !== 'UNVERIFIED') return {
+    label: place.matchedBy === 'GOOGLE_MAPS_GROUNDING' ? 'Maps 출처 · 장소 확인' : '장소 확인', className: 'bg-emerald-50 text-emerald-700'
   };
+  return { label: '미검증', className: 'bg-slate-100 text-slate-500' };
 };
-
 const toNumberOrZero = (value) => {
   if (value === '' || value === null || value === undefined) return 0;
   const parsed = Number(value);
@@ -197,71 +138,9 @@ const buildGoogleDirectionsLink = (place, detailData) => {
   return `https://www.google.com/maps/dir/?${params.toString()}`;
 };
 
-const searchPlaces = (service, query) =>
-  new Promise((resolve, reject) => {
-    service.textSearch({ query }, (results, status) => {
-      if (status === window.google.maps.places.PlacesServiceStatus.OK) {
-        resolve(results || []);
-        return;
-      }
-      if (status === window.google.maps.places.PlacesServiceStatus.ZERO_RESULTS) {
-        resolve([]);
-        return;
-      }
-      reject(new Error(`Places 검색 실패: ${status}`));
-    });
-  });
-
-const findSinglePlace = (service, query) =>
-  new Promise((resolve, reject) => {
-    service.findPlaceFromQuery(
-      {
-        query,
-        fields: ['place_id', 'name', 'formatted_address', 'geometry']
-      },
-      (results, status) => {
-        if (status === window.google.maps.places.PlacesServiceStatus.OK && results?.length) {
-          resolve(results[0]);
-          return;
-        }
-        if (status === window.google.maps.places.PlacesServiceStatus.ZERO_RESULTS) {
-          resolve(null);
-          return;
-        }
-        reject(new Error(`Place 탐색 실패: ${status}`));
-      }
-    );
-  });
-
-const getPlaceDetail = (service, placeId) =>
-  new Promise((resolve, reject) => {
-    service.getDetails(
-      {
-        placeId,
-        fields: [
-          'place_id',
-          'name',
-          'formatted_address',
-          'rating',
-          'user_ratings_total',
-          'opening_hours',
-          'reviews',
-          'website',
-          'formatted_phone_number',
-          'url',
-          'business_status'
-        ]
-      },
-      (result, status) => {
-        if (status === window.google.maps.places.PlacesServiceStatus.OK && result) {
-          resolve(result);
-          return;
-        }
-        reject(new Error(`상세 조회 실패: ${status}`));
-      }
-    );
-  });
-
+const searchPlaces = (...args) => searchPlacesNew(args[1]);
+const findSinglePlace = async (...args) => (await searchPlacesNew(args[1]))[0] || null;
+const getPlaceDetail = (...args) => placeDetailNew(args[1]);
 export default function PlanDetail() {
   const { id } = useParams();
   const [plan, setPlan] = useState(null);
@@ -283,8 +162,8 @@ export default function PlanDetail() {
   const [detailState, setDetailState] = useState({ loading: false, error: '', data: null });
   const [focusedPlaceKey, setFocusedPlaceKey] = useState(null);
   const [routePath, setRoutePath] = useState([]);
-  const [isRouteLoading, setIsRouteLoading] = useState(false);
-  const [isDirectionsDenied, setIsDirectionsDenied] = useState(false);
+
+
   const [isMapCollapsed, setIsMapCollapsed] = useState(false);
   const [mobileView, setMobileView] = useState('plan');
   const placesServiceRef = useRef(null);
@@ -300,7 +179,7 @@ export default function PlanDetail() {
   useEffect(() => {
     if (!isLoaded || !window.google?.maps?.places) return;
     if (!placesServiceRef.current) {
-      placesServiceRef.current = new window.google.maps.places.PlacesService(document.createElement('div'));
+      placesServiceRef.current = {};
     }
   }, [isLoaded]);
 
@@ -418,72 +297,7 @@ export default function PlanDetail() {
     setFocusedPlaceKey(null);
   }, [selectedDay]);
 
-  useEffect(() => {
-    if (!isLoaded || !window.google?.maps || currentDayPlaces.length < 2) {
-      setRoutePath(currentDayPlaces.map(toLatLngLiteral));
-      setIsRouteLoading(false);
-      return;
-    }
-
-    if (isDirectionsDenied) {
-      setRoutePath(currentDayPlaces.map(toLatLngLiteral));
-      setIsRouteLoading(false);
-      return;
-    }
-
-    let cancelled = false;
-
-    const loadRoutePath = async () => {
-      setIsRouteLoading(true);
-      try {
-        const routesLibrary = await window.google.maps.importLibrary('routes');
-        const RouteClass = routesLibrary?.Route;
-        if (!RouteClass) {
-          throw new Error('ROUTES_LIBRARY_UNAVAILABLE');
-        }
-
-        const { path } = await buildRoutePathFromComputeRoutes(
-          RouteClass,
-          currentDayPlaces,
-          DEFAULT_ROUTE_TRAVEL_MODE
-        );
-        if (cancelled) return;
-
-        if (path.length > 1) {
-          setRoutePath(path);
-        } else {
-          setRoutePath(currentDayPlaces.map(toLatLngLiteral));
-        }
-      } catch (error) {
-        const message = String(error?.message || '');
-        const isPermissionDenied =
-          message.includes('REQUEST_DENIED') ||
-          message.includes('PERMISSION_DENIED') ||
-          message.includes('ROUTES_LIBRARY_UNAVAILABLE') ||
-          message.includes('NotActivatedMapError') ||
-          message.includes('legacy API') ||
-          message.includes('ApiNotActivatedMapError');
-
-        if (isPermissionDenied) {
-          console.warn('Routes API 권한 없음. 직선 경로 모드로 전환합니다.');
-          setIsDirectionsDenied(true);
-        } else {
-          console.error('Routes 경로 계산 실패:', error);
-        }
-
-        if (!cancelled) {
-          setRoutePath(currentDayPlaces.map(toLatLngLiteral));
-        }
-      } finally {
-        if (!cancelled) setIsRouteLoading(false);
-      }
-    };
-
-    loadRoutePath();
-    return () => {
-      cancelled = true;
-    };
-  }, [isLoaded, currentDayPlaces, isDirectionsDenied]);
+  useEffect(() => { setRoutePath(currentDayPlaces.map(toLatLngLiteral)); }, [currentDayPlaces]);
 
   const onLoadMap = useCallback((map) => {
     setMapInstance(map);
@@ -589,7 +403,7 @@ export default function PlanDetail() {
       googlePlaceId: candidate.googlePlaceId,
       latitude: candidate.latitude,
       longitude: candidate.longitude,
-      confidence: 1,
+      confidence: null,
       matchedBy: 'USER_SELECTED_PLACE',
       verificationUncertain: false
     }));
@@ -633,7 +447,8 @@ export default function PlanDetail() {
                 latitude: lat,
                 longitude: lng,
                 googlePlaceId: placeId,
-                confidence: 1,
+                confidence: null,
+                sourceUri: null, sourceTitle: null,
                 matchedBy: 'USER_AUTO_REPLACE',
                 verificationUncertain: false
               }
@@ -651,6 +466,7 @@ export default function PlanDetail() {
   const applyReplace = () => {
     if (!replaceTarget) return;
 
+    if (!replaceTarget.googlePlaceId) { setReplaceSearchError('검색 결과에서 장소를 선택해 주세요.'); return; }
     const trimmedName = replaceTarget.placeName.trim();
     if (!trimmedName) {
       alert('장소명은 비워둘 수 없습니다.');
@@ -670,7 +486,8 @@ export default function PlanDetail() {
               latitude: toNumberOrZero(replaceTarget.latitude),
               longitude: toNumberOrZero(replaceTarget.longitude),
               googlePlaceId: replaceTarget.googlePlaceId,
-              confidence: replaceTarget.googlePlaceId ? (replaceTarget.confidence ?? 1) : null,
+              confidence: null,
+              sourceUri: null, sourceTitle: null,
               matchedBy: replaceTarget.googlePlaceId ? (replaceTarget.matchedBy || 'USER_SELECTED_PLACE') : 'USER_MANUAL',
               verificationUncertain: replaceTarget.googlePlaceId ? false : true
             }
@@ -727,6 +544,7 @@ export default function PlanDetail() {
           businessStatusLabel: localizeBusinessStatus(detail.business_status),
           reviews: (detail.reviews || []).slice(0, 3).map((review) => ({
             author: review.author_name || '사용자',
+            authorUrl: review.author_url,
             rating: review.rating ?? null,
             text: review.text || ''
           }))
@@ -784,46 +602,23 @@ export default function PlanDetail() {
     if (!plan) return;
     setIsSaving(true);
     try {
-      for (const day of editableItineraries) {
-        if (!day.id) continue;
-
-        const payload = {
-          places: (day.places || []).map((place, index) => ({
-            placeName: (place.placeName || '').trim() || `장소 ${index + 1}`,
-            googlePlaceId: place.googlePlaceId || null,
-            startTime: place.startTime || null,
-            durationMinutes: place.durationMinutes ?? null,
-            category: place.category || null,
-            latitude: place.latitude ?? 0,
-            longitude: place.longitude ?? 0,
-            memo: place.memo || '',
-            confidence: place.confidence ?? null,
-            matchedBy: place.matchedBy || null,
-            verificationUncertain: !!place.verificationUncertain
-          }))
-        };
-
-        const response = await fetchWithAuth(
-          buildApiUrl(`/api/plans/${plan.id}/itineraries/${day.id}/places`),
-          {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-          }
-        );
-
-        if (!response.ok) {
-          const errorText = await response.text();
-          throw new Error(errorText || `Day ${day.dayNumber} 저장 실패`);
-        }
+      const days = editableItineraries.map((day) => ({ itineraryId: day.id, places: (day.places || []).map((place) => ({
+        placeName: place.placeName, googlePlaceId: place.googlePlaceId || null, startTime: place.startTime || null,
+        durationMinutes: place.durationMinutes ?? null, category: place.category || null, memo: place.memo || ''
+      })) }));
+      const response = await fetchWithAuth(buildApiUrl(`/api/plans/${plan.id}/places`), {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ days })
+      });
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.message || '일정 저장에 실패했습니다.');
       }
-
       await fetchPlanDetail();
       setIsEditMode(false);
       alert('편집한 일정이 저장되었습니다.');
     } catch (error) {
       console.error('일정 저장 실패:', error);
-      alert('저장 중 오류가 발생했습니다. 다시 시도해 주세요.');
+      alert(error.message || '저장 중 오류가 발생했습니다. 다시 시도해 주세요.');
     } finally {
       setIsSaving(false);
     }
@@ -942,8 +737,8 @@ export default function PlanDetail() {
 
           <div className="mt-3 flex flex-wrap gap-2 text-xs font-medium text-[#4b6177]">
             {plan.departure && <span className="rounded border border-[#d6e9fa] bg-[#f2f9ff] px-2 py-1">출발: {plan.departure}</span>}
-            {plan.companion && <span className="rounded border border-[#d6e9fa] bg-[#f2f9ff] px-2 py-1">동행: {plan.companion}</span>}
-            {plan.style && <span className="rounded border border-[#d6e9fa] bg-[#f2f9ff] px-2 py-1">스타일: {plan.style}</span>}
+            {plan.companion && <span className="rounded border border-[#d6e9fa] bg-[#f2f9ff] px-2 py-1">동행: {({ SOLO: '혼자', COUPLE: '연인', FRIENDS: '친구', FAMILY: '가족' })[plan.companion] || plan.companion}</span>}
+            {plan.style && <span className="rounded border border-[#d6e9fa] bg-[#f2f9ff] px-2 py-1">스타일: {plan.style.replaceAll('FOOD', '맛집').replaceAll('CAFE', '카페').replaceAll('NATURE', '자연').replaceAll('CULTURE', '문화').replaceAll('SHOPPING', '쇼핑').replaceAll('EXPERIENCE', '체험').replaceAll('[', '').replaceAll(']', '')}</span>}
             {plan.accommodation && (
               <>
                 <button
@@ -965,6 +760,7 @@ export default function PlanDetail() {
         </div>
 
         <div className="space-y-8 p-4 pb-8 sm:p-6 sm:pb-20">
+          <p className="rounded-xl bg-slate-50 p-4 text-xs leading-relaxed text-slate-500">{plan.generationNotes || '이전 버전의 일정입니다. 장소와 영업 정보를 다시 확인해 주세요.'} 지도 연결선은 방문 순서이며 실제 이동 경로가 아닙니다.</p>
           {displayItineraries.map((day) => (
             <div key={day.id || day.dayNumber} className="relative">
               <h2 className="mb-4 flex items-center gap-2 text-xl font-bold text-[#1f3550]">
@@ -978,7 +774,7 @@ export default function PlanDetail() {
                     const placeKey = buildPlaceKey(day.dayNumber, idx, place);
                     const focusable = day.dayNumber === selectedDay && hasValidCoordinates(place);
                     const isFocused = focusedPlaceKey === placeKey;
-                    const verificationBadge = getVerificationBadge(place);
+                    const verificationBadge = getVerificationBadge(place, isEditMode);
                     return (
                   <div
                     key={placeKey}
@@ -1009,6 +805,7 @@ export default function PlanDetail() {
                         openPlaceDetail(place);
                       }}
                     >
+
                       <div className="flex items-start justify-between gap-3">
                         <h3 className="flex items-center gap-2 text-lg font-bold text-[#1f3550] transition group-hover:text-[#1f8ef1]">
                           {isEditMode && <GripVertical size={16} className="text-[#5f89ad]" />}
@@ -1086,6 +883,7 @@ export default function PlanDetail() {
                           <Bot size={16} className="mt-0.5 shrink-0 text-[#1f8ef1]" /> {place.memo}
                         </p>
                       )}
+                      {place.sourceUri && isGoogleMapsSource(place.sourceUri) && <a href={place.sourceUri} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className="mt-2 inline-flex gap-1 text-xs font-normal text-[#5e5e5e]"><span translate="no" className="whitespace-nowrap">Google Maps</span> · {place.sourceTitle || place.placeName} ↗</a>}
                     </div>
                   </div>
                     );
@@ -1201,18 +999,9 @@ export default function PlanDetail() {
           </GoogleMap>
         )}
 
-        {isRouteLoading && (
-          <div className="absolute bottom-3 left-3 z-10 flex items-center gap-2 rounded-full border border-[#cde4f8] bg-white/95 px-3 py-1.5 text-xs font-bold text-[#2d587a] shadow-lg backdrop-blur">
-            <Loader2 size={12} className="animate-spin text-[#1f8ef1]" />
-            경로 계산 중
-          </div>
-        )}
 
-        {isDirectionsDenied && (
-          <div className="absolute bottom-3 left-3 z-10 rounded-full border border-[#f3d7b4] bg-[#fff9f2]/95 px-3 py-1.5 text-xs font-bold text-[#9a5a10] shadow-lg backdrop-blur">
-            도로 경로 권한 없음: 직선 경로로 표시 중
-          </div>
-        )}
+
+
 
       </div>
 
@@ -1225,7 +1014,7 @@ export default function PlanDetail() {
                 <input
                   type="text"
                   value={replaceTarget.placeName}
-                  onChange={(event) => setReplaceTarget((prev) => ({ ...prev, placeName: event.target.value }))}
+                  onChange={(event) => setReplaceTarget((prev) => ({ ...prev, placeName: event.target.value, googlePlaceId: '' }))}
                   placeholder="장소명"
                   className="w-full rounded-xl border border-[#d2e8fb] px-3 py-2 text-sm outline-none focus:border-[#1f8ef1]"
                 />
@@ -1260,29 +1049,7 @@ export default function PlanDetail() {
                 </div>
               )}
 
-              <input
-                type="text"
-                value={replaceTarget.googlePlaceId}
-                onChange={(event) => setReplaceTarget((prev) => ({ ...prev, googlePlaceId: event.target.value }))}
-                placeholder="Google Place ID (선택)"
-                className="w-full rounded-xl border border-[#d2e8fb] px-3 py-2 text-sm outline-none focus:border-[#1f8ef1]"
-              />
-              <div className="grid grid-cols-2 gap-2">
-                <input
-                  type="number"
-                  value={replaceTarget.latitude}
-                  onChange={(event) => setReplaceTarget((prev) => ({ ...prev, latitude: event.target.value }))}
-                  placeholder="위도"
-                  className="w-full rounded-xl border border-[#d2e8fb] px-3 py-2 text-sm outline-none focus:border-[#1f8ef1]"
-                />
-                <input
-                  type="number"
-                  value={replaceTarget.longitude}
-                  onChange={(event) => setReplaceTarget((prev) => ({ ...prev, longitude: event.target.value }))}
-                  placeholder="경도"
-                  className="w-full rounded-xl border border-[#d2e8fb] px-3 py-2 text-sm outline-none focus:border-[#1f8ef1]"
-                />
-              </div>
+              <p className="text-xs text-slate-500">검색 결과에서 장소를 선택해 주세요. 위치와 검증 상태는 서버에서 다시 확인합니다.</p>
               <textarea
                 value={replaceTarget.memo}
                 onChange={(event) => setReplaceTarget((prev) => ({ ...prev, memo: event.target.value }))}
@@ -1381,9 +1148,9 @@ export default function PlanDetail() {
                     <p className="font-bold text-[#1f3550]">리뷰 요약</p>
                     <div className="mt-1 space-y-2">
                       {detailState.data.reviews.map((review, idx) => (
-                        <div key={`${review.author}-${idx}`} className="rounded-xl border border-[#dbeaf9] bg-[#f8fcff] p-3 text-sm sm:text-xs">
+                        <div key={`${review.authorUrl ? <a href={review.authorUrl} target="_blank" rel="noopener noreferrer">{review.author}</a> : review.author}-${idx}`} className="rounded-xl border border-[#dbeaf9] bg-[#f8fcff] p-3 text-sm sm:text-xs">
                           <p className="font-bold text-[#2f5f86]">
-                            {review.author}
+                            {review.authorUrl ? <a href={review.authorUrl} target="_blank" rel="noopener noreferrer">{review.author}</a> : review.author}
                             {review.rating ? ` · ${review.rating}` : ''}
                           </p>
                           <p className="mt-1 text-[#4b6177]">{review.text || '리뷰 본문 없음'}</p>

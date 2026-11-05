@@ -11,11 +11,11 @@ export default function Home() {
         <div className="relative z-10">
           <h1 className="serif-display max-w-3xl text-[34px] leading-tight text-[#13263a] md:text-6xl">
             여행 일정 초안을
-            <span className="ml-2 text-[#1f8ef1]">실행 가능한 동선</span>으로.
+            <span className="ml-2 text-[#1f8ef1]">나에게 맞는 여행</span>으로.
           </h1>
 
           <p className="mt-6 max-w-2xl text-base leading-relaxed text-[#4b6177] md:text-lg">
-            Compass는 취향, 이동 시간, 여행 스타일을 반영해 일정의 뼈대를 빠르게 만들어줍니다.
+            여행지와 취향을 고르면 Google Maps 정보를 참고해 실제 장소를 확인하고 일정 초안을 만들어요.
             국내 여행도 보기 쉬운 한국어 중심으로 정리하고, 이후에 직접 수정하며 완성할 수 있습니다.
           </p>
 
@@ -25,7 +25,7 @@ export default function Home() {
               className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-[#1f8ef1] px-7 py-3.5 text-base font-bold text-white shadow-[0_16px_30px_rgba(31,142,241,0.3)] transition hover:-translate-y-0.5 hover:bg-[#1878cc] sm:w-auto"
             >
               <Plane size={18} />
-              AI 플래너 시작하기
+              여행 만들기
             </Link>
             <Link
               to="/mypage"
@@ -40,7 +40,7 @@ export default function Home() {
       <section className="mt-7 grid grid-cols-1 gap-4 md:mt-10 md:grid-cols-3 md:gap-5">
         <article className="reveal-up rounded-3xl border border-[#d7e9fa] bg-[#f9fdff]/95 p-6 shadow-[0_12px_30px_rgba(80,126,173,0.12)]">
           <Map className="mb-4 h-11 w-11 rounded-2xl bg-[#dff1ff] p-2.5 text-[#1f8ef1]" />
-          <h3 className="text-lg font-extrabold text-[#1f3550]">동선 중심 추천</h3>
+          <h3 className="text-lg font-extrabold text-[#1f3550]">장소를 확인하는 추천</h3>
           <p className="mt-2 text-sm leading-relaxed text-[#4b6177]">
             장소를 나열하는 수준이 아니라, 이동 부담을 고려한 순서로 하루를 구성합니다.
           </p>
@@ -56,7 +56,7 @@ export default function Home() {
 
         <article className="reveal-up rounded-3xl border border-[#d7e9fa] bg-[#f9fdff]/95 p-6 shadow-[0_12px_30px_rgba(80,126,173,0.12)] [animation-delay:220ms]">
           <Plane className="mb-4 h-11 w-11 rounded-2xl bg-[#dff1ff] p-2.5 text-[#1f8ef1]" />
-          <h3 className="text-lg font-extrabold text-[#1f3550]">바로 실행 가능한 형태</h3>
+          <h3 className="text-lg font-extrabold text-[#1f3550]">저장하고 직접 완성하기</h3>
           <p className="mt-2 text-sm leading-relaxed text-[#4b6177]">
             생성한 일정을 저장하고 상세 페이지에서 지도 기반으로 확인할 수 있습니다.
           </p>

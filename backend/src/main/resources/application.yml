@@ -2,8 +2,10 @@ spring:
   application:
     name: compass-backend
 
-  autoconfigure:
-    exclude: org.springframework.ai.vectorstore.pgvector.autoconfigure.PgVectorStoreAutoConfiguration
+
+  flyway:
+    baseline-on-migrate: true
+    baseline-version: 0
 
   datasource:
     url: jdbc:postgresql://${DB_HOST:127.0.0.1}:${DB_PORT:5433}/${DB_NAME:compass}
@@ -39,50 +41,23 @@ spring:
         project-id: ${GOOGLE_PROJECT_ID}
         location: ${GOOGLE_CLOUD_LOCATION:global}
         credentials-uri: ${GOOGLE_CREDENTIALS_URI}
-        chat:
-          options:
-            model: ${app.ai.model.general}
-            functions:
-              - currentWeatherFunction
-    vectorstore:
-      pgvector:
-        table-name: travel_embeddings
-        dimensions: 768
 
-  data:
-    redis:
-      host: ${REDIS_HOST:localhost}
-      port: ${REDIS_PORT:6379}
 
 jwt:
   secret: ${JWT_SECRET}
 
-logging:
-  level:
-    org.springframework.ai: WARN
 
-weather:
-  api-key: ${WEATHER_API_KEY:default}
 
 app:
+  auth:
+    secure-cookies: false
   ai:
     model:
-      general: ${AI_MODEL_GENERAL:gemini-3.8-flash}
-      plan: ${AI_MODEL_PLAN:gemini-3.1-pro-preview}
-    chat:
-      history-window-messages: ${AI_CHAT_HISTORY_WINDOW_MESSAGES:12}
+      plan: ${AI_MODEL_PLAN:gemini-4-argon}
   places:
     api-key: ${GOOGLE_PLACES_API_KEY:}
-    language-code: ${GOOGLE_PLACES_LANGUAGE:ko}
-    verification:
-      enabled: ${PLACES_VERIFICATION_ENABLED:true}
-      max-places-per-plan: ${PLACES_VERIFICATION_MAX_PLACES:20}
-      min-score: ${PLACES_VERIFICATION_MIN_SCORE:45}
-      candidates-per-query: ${PLACES_VERIFICATION_CANDIDATES_PER_QUERY:5}
-      cache-ttl-hours: ${PLACES_VERIFICATION_CACHE_TTL_HOURS:24}
   quota:
     plan-per-day: ${PLAN_QUOTA_PER_DAY:3}
-    chat-per-day: ${CHAT_QUOTA_PER_DAY:${CHAT_QUOTA_PER_SESSION:10}}
   admin:
     emails: ${ADMIN_EMAILS:}
   cors:

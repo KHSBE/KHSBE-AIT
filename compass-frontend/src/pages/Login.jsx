@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom';
+
 import { Sparkles } from 'lucide-react';
 import { GOOGLE_OAUTH2_URL } from '../utils/api';
 
@@ -14,7 +14,7 @@ export default function Login() {
           <p className="text-xs font-bold uppercase tracking-[0.18em] text-white/80">Compass Identity</p>
           <h2 className="serif-display mt-6 text-5xl leading-tight">Plan Less. Travel Better.</h2>
           <p className="mt-6 max-w-sm text-sm leading-relaxed text-white/85">
-            로그인하면 AI 플래너를 바로 사용할 수 있습니다.
+            로그인하고 나에게 맞는 여행을 만들어 보세요.
             국내/해외 여행 일정을 간단한 입력으로 빠르게 만들어 보세요.
           </p>
         </div>
@@ -31,15 +31,10 @@ export default function Login() {
             className="mt-8 flex w-full items-center justify-center gap-2 rounded-2xl border border-[#cfe4f7] bg-white px-5 py-3.5 text-sm font-bold text-[#2f4459] transition hover:-translate-y-0.5 hover:border-[#1f8ef1] hover:shadow-[0_10px_24px_rgba(31,142,241,0.18)]"
           >
             <img src="https://www.svgrepo.com/show/475656/google-color.svg" alt="Google" className="h-5 w-5" />
-            Google 계정으로 계속하기
+            Google로 시작하기
           </button>
 
-          <p className="mt-8 text-center text-sm text-[#4b6177]">
-            아직 계정이 없나요?{' '}
-            <Link to="/signup" className="font-bold text-[#1f8ef1] underline-offset-4 hover:underline">
-              회원가입
-            </Link>
-          </p>
+
         </div>
       </div>
     </div>

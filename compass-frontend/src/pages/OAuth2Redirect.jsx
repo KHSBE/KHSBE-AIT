@@ -1,32 +1,43 @@
-import { useEffect } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
-
+import { useEffect, useState } from "react";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { exchangeLoginCode } from "../utils/api";
 export default function OAuth2Redirect() {
-  const [searchParams] = useSearchParams();
+  const [params] = useSearchParams();
   const navigate = useNavigate();
-
+  const [failure, setError] = useState("");
+  const error =
+    failure ||
+    (!params.get("code")
+      ? "로그인 코드가 없습니다. 다시 로그인해 주세요."
+      : "");
   useEffect(() => {
-    const token = searchParams.get('token');
-    const refreshToken = searchParams.get('refreshToken');
-
-    if (token && refreshToken) {
-      localStorage.setItem('accessToken', token);
-      localStorage.setItem('refreshToken', refreshToken);
-      navigate('/planner');
-      return;
-    }
-
-    alert('로그인 처리에 실패했습니다. 다시 시도해 주세요.');
-    navigate('/login');
-  }, [searchParams, navigate]);
-
+    let active = true;
+    const code = params.get("code");
+    if (!code) return;
+    exchangeLoginCode(code)
+      .then(() => {
+        if (active) navigate("/planner", { replace: true });
+      })
+      .catch((e) => {
+        if (active) setError(e.message);
+      });
+    return () => {
+      active = false;
+    };
+  }, [params, navigate]);
   return (
-    <div className="flex min-h-[calc(100vh-76px)] items-center justify-center px-4">
-      <div className="rounded-3xl border border-[#cfe4f7] bg-[#f9fdff]/95 px-8 py-10 text-center shadow-[0_24px_56px_rgba(68,130,189,0.18)]">
-        <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#4d7fa8]">OAuth Redirect</p>
-        <h2 className="mt-3 text-2xl font-black text-[#1f3550]">로그인 처리 중입니다</h2>
-        <p className="mt-2 animate-pulse text-sm text-[#4b6177]">잠시만 기다려 주세요...</p>
-      </div>
+    <div className="mx-auto max-w-md px-6 py-20 text-center">
+      <h1 className="text-2xl font-bold">
+        {error ? "로그인을 완료하지 못했어요" : "로그인 처리 중이에요"}
+      </h1>
+      <p className="mt-4 text-sm text-slate-500" role="status">
+        {error || "잠시만 기다려 주세요."}
+      </p>
+      {error && (
+        <Link to="/login" className="mt-6 inline-block text-blue-600">
+          다시 로그인하기
+        </Link>
+      )}
     </div>
   );
 }
